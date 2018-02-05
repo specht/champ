@@ -987,6 +987,7 @@ int main(int argc, char** argv)
         printf("Options:\n");
         printf("  --show-screen\n");
         printf("  --hide-log\n");
+        exit(1);
     }
 
     for (int i = 1; i < argc; i++)
@@ -1036,7 +1037,6 @@ int main(int argc, char** argv)
                 case (KeyRelease) :
                     if (evt.xkey.keycode == keyQ)
                         exit_program = 1;
-
 
                 case (ClientMessage) :
                     if (evt.xclient.data.l[0] == wmDelete)
