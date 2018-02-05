@@ -1,10 +1,4 @@
-#define SHOW_SCREEN
-#define SHOW_LOG
-
-#ifdef SHOW_SCREEN
 #include <X11/Xlib.h>
-#endif
-
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -24,7 +18,6 @@
 #define OVERFLOW            0x40
 #define NEGATIVE            0x80
 
-#ifdef SHOW_SCREEN
 Display *dsp;
 Window win;
 GC gc;
@@ -32,6 +25,8 @@ unsigned int white, black;
 Atom wmDelete;
 XEvent evt;
 KeyCode keyQ;
+uint8_t show_screen = 0;
+uint8_t show_log = 1;
 
 int init_display()
 {
@@ -92,7 +87,6 @@ uint16_t yoffset[192] = {
     0x0350, 0x0750, 0x0b50, 0x0f50, 0x1350, 0x1750, 0x1b50, 0x1f50,
     0x03d0, 0x07d0, 0x0bd0, 0x0fd0, 0x13d0, 0x17d0, 0x1bd0, 0x1fd0
 };
-#endif
 
 typedef struct {
     uint16_t ip;
@@ -640,11 +634,12 @@ void handle_next_opcode()
             break;
     }
 
-    #ifdef SHOW_LOG
-    printf("%04x | %d | %02x | %s %-18s | ", old_ip, cycles, read_opcode, OPCODE_STRINGS[opcode],
-        ADDRESSING_MODE_STRINGS[addressing_mode]
-    );
-    #endif
+    if (show_log)
+    {
+        printf("%04x | %d | %02x | %s %-18s | ", old_ip, cycles, read_opcode, OPCODE_STRINGS[opcode],
+            ADDRESSING_MODE_STRINGS[addressing_mode]
+        );
+    }
 
     int unhandled_opcode = 0;
     uint8_t t8 = 0;
@@ -950,14 +945,14 @@ void handle_next_opcode()
         exit(1);
     }
     cpu.total_cycles += cycles;
-    #ifdef SHOW_LOG
-    printf("A: %02x, X: %02x, Y: %02x, FLAGS: %02x, PC: %04x, SP: %02x | %10ld",
-        cpu.a, cpu.x, cpu.y, cpu.flags, cpu.ip, cpu.sp, cpu.total_cycles);
-    printf("\n");
-    #endif
+    if (show_log)
+    {
+        printf("A: %02x, X: %02x, Y: %02x, FLAGS: %02x, PC: %04x, SP: %02x | %10ld",
+               cpu.a, cpu.x, cpu.y, cpu.flags, cpu.ip, cpu.sp, cpu.total_cycles);
+        printf("\n");
+    }
 }
 
-#ifdef SHOW_SCREEN
 void set_pixel(int px, int py, unsigned int color)
 {
     int x, y;
@@ -982,16 +977,30 @@ void render_hires_screen()
         }
     }
 }
-#endif
 
 int main(int argc, char** argv)
 {
+    if (argc < 2)
+    {
+        printf("Usage: ./champ [options] <memory dump>\n");
+        printf("\n");
+        printf("Options:\n");
+        printf("  --show-screen\n");
+        printf("  --hide-log\n");
+    }
+
+    for (int i = 1; i < argc; i++)
+    {
+        if (strcmp(argv[i], "--show-screen") == 0)
+            show_screen = 1;
+        if (strcmp(argv[i], "--hide-log") == 0)
+            show_log = 0;
+    }
     memset(ram, 0, 0x10000);
-    load("dump2", 0);
-    
-    #ifdef SHOW_SCREEN
-    init_display();
-    #endif
+    load(argv[argc - 1], 0);
+
+    if (show_screen)
+        init_display();
 
     init_cpu(&cpu);
     cpu.ip = 0x6000;
@@ -1015,34 +1024,35 @@ int main(int argc, char** argv)
 //         }
 //         else
 //             break;
-        #ifdef SHOW_SCREEN
-        if (XEventsQueued(dsp, QueuedAfterFlush) > 0)
+        if (show_screen)
         {
-            int exit_program = 0;
-            XNextEvent(dsp, &evt);
+            if (XEventsQueued(dsp, QueuedAfterFlush) > 0)
+            {
+                int exit_program = 0;
+                XNextEvent(dsp, &evt);
 
-            switch (evt.type) {
+                switch (evt.type) {
 
-            case (KeyRelease) :
-                if (evt.xkey.keycode == keyQ)
-                    exit_program = 1;
+                case (KeyRelease) :
+                    if (evt.xkey.keycode == keyQ)
+                        exit_program = 1;
 
 
-            case (ClientMessage) :
-                if (evt.xclient.data.l[0] == wmDelete)
-                    exit_program = 1;
-                break;
+                case (ClientMessage) :
+                    if (evt.xclient.data.l[0] == wmDelete)
+                        exit_program = 1;
+                    break;
 
+                }
+                if (exit_program)
+                    break;
             }
-            if (exit_program)
-                break;
+            if (ram[0x30b] != old_screen_number)
+            {
+                old_screen_number = ram[0x30b];
+                render_hires_screen();
+            }
         }
-        if (ram[0x30b] != old_screen_number)
-        {
-            old_screen_number = ram[0x30b];
-            render_hires_screen();
-        }
-        #endif
     }
     printf("Total cycles: %d\n", cpu.total_cycles);
     return 0;
