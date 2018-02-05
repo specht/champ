@@ -13,6 +13,9 @@ File::open('plot3d20_Output.txt') do |f|
         next if symbol[0] == '*'
         next if symbol[0] == ';'
         next if symbol[0] == ' '
+        if symbol =~ /^\w+\s+EQU\s+\$([0-9A-F]{4})/
+            address = $1
+        end
         symbol = symbol.strip.split(' ').first
         next if address.nil?
         label_for_address[address.to_i(16)] = symbol
