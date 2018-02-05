@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include "labels.h"
 
 #define SCALE 4
 #define SCREEN_WIDTH 280
@@ -25,8 +26,15 @@ unsigned int white, black;
 Atom wmDelete;
 XEvent evt;
 KeyCode keyQ;
+
 uint8_t show_screen = 0;
 uint8_t show_log = 1;
+uint8_t show_call_stack = 0;
+
+uint8_t trace_stack[0x100];
+uint8_t trace_stack_pointer = 0xff;
+uint16_t trace_stack_function[0x100];
+uint64_t cycles_per_function[0x10000];
 
 int init_display()
 {
@@ -787,6 +795,22 @@ void handle_next_opcode()
             break;
         case JSR:
             // push IP - 1 because target address has already been read
+//             if (label_for_address[target_address] >= 0)
+//             {
+//                 for (int i = trace_stack_pointer; i < 0xff; i++)
+//                     printf("  ");
+//                 printf("JSR: %s\n", LABELS[label_for_address[target_address]]);
+//             }
+//             else
+//             {
+//                 for (int i = trace_stack_pointer; i < 0xff; i++)
+//                     printf("  ");
+//                 printf("JSR: %04x\n", target_address);
+//             }
+            trace_stack_function[trace_stack_pointer] = target_address;
+            trace_stack[trace_stack_pointer] = cpu.sp;
+            trace_stack_pointer--;
+
             push(((cpu.ip - 1) >> 8) & 0xff);
             push((cpu.ip - 1) & 0xff);
             cpu.ip = target_address;
@@ -883,6 +907,16 @@ void handle_next_opcode()
             cpu.ip = t16;
             break;
         case RTS:
+            if (trace_stack[trace_stack_pointer + 1] == cpu.sp + 2)
+            {
+                trace_stack_pointer++;
+//                 for (int i = trace_stack_pointer; i < 0xff; i++)
+//                     printf("  ");
+//                 printf("RTS: .... %02x\n", cpu.sp + 2);
+            }
+//             else
+//                 printf("ommitting RTS from stack trace...\n");
+
             t16 = pop();
             t16 |= ((uint16_t)pop()) << 8;
             cpu.ip = t16 + 1;
@@ -945,10 +979,20 @@ void handle_next_opcode()
         exit(1);
     }
     cpu.total_cycles += cycles;
+    if (trace_stack_pointer < 0xff)
+        cycles_per_function[trace_stack_function[trace_stack_pointer + 1]] += cycles;
     if (show_log)
     {
-        printf("A: %02x, X: %02x, Y: %02x, FLAGS: %02x, PC: %04x, SP: %02x | %10ld",
-               cpu.a, cpu.x, cpu.y, cpu.flags, cpu.ip, cpu.sp, cpu.total_cycles);
+        char flags_str[6];
+        flags_str[0] = test_flag(CARRY) ? 'C' : 'c';
+        flags_str[1] = test_flag(ZERO) ? 'Z' : 'z';
+        flags_str[2] = test_flag(DECIMAL_MODE) ? 'D' : 'd';
+        flags_str[3] = test_flag(OVERFLOW) ? 'V' : 'v';
+        flags_str[4] = test_flag(NEGATIVE) ? 'N' : 'n';
+        flags_str[5] = 0;
+
+        printf("A: %02x, X: %02x, Y: %02x, PC: %04x, SP: %02x, FLAGS: %02x %s | %10ld |",
+               cpu.a, cpu.x, cpu.y, cpu.ip, cpu.sp, cpu.flags, flags_str, cpu.total_cycles);
         printf("\n");
     }
 }
@@ -997,7 +1041,9 @@ int main(int argc, char** argv)
         if (strcmp(argv[i], "--hide-log") == 0)
             show_log = 0;
     }
-    memset(ram, 0, 0x10000);
+    memset(ram, 0, sizeof(ram));
+    memset(cycles_per_function, 0, sizeof(cycles_per_function));
+
     load(argv[argc - 1], 0);
 
     if (show_screen)
@@ -1011,8 +1057,8 @@ int main(int argc, char** argv)
     uint32_t next_display_refresh = 0;
     uint8_t old_screen_number = 0;
     while (1) {
-        if (cpu.ip >= 0xf5b2)
-            printf("*** ");
+//         if (cpu.ip >= 0xf5b2)
+//             printf("*** ");
         handle_next_opcode();
 //         if (cycles)
 //         {
@@ -1055,5 +1101,16 @@ int main(int argc, char** argv)
         }
     }
     printf("Total cycles: %d\n", cpu.total_cycles);
+    for (uint32_t i = 0; i < 0x10000; i++)
+    {
+        if (cycles_per_function[i] > 0)
+        {
+            printf("%12d %5.2f%% %04x", cycles_per_function[i],
+                   cycles_per_function[i] * 100.0 / cpu.total_cycles, i);
+            if (label_for_address[i] >= 0)
+                printf(" %s", LABELS[label_for_address[i]]);
+            printf("\n");
+        }
+    }
     return 0;
 }
