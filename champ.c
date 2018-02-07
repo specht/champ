@@ -1115,7 +1115,7 @@ int main(int argc, char** argv)
                 frame_count += 1;
 //                     printf("%ld\n", (cpu.total_cycles - last_frame_cycle_count));
 //                     printf("%d\n", (uint64_t)((double)frame_cycle_count / frame_count));
-                if (frame_count >= 100)
+                if ((max_frames > 0) && (frame_count >= max_frames))
                     break;
             }
             last_frame_cycle_count = cpu.total_cycles;
