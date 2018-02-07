@@ -1043,9 +1043,9 @@ int main(int argc, char** argv)
 
     load(argv[argc - 1], 0);
     // rotation mode
-    ram[0x35b] = 0;
+//     ram[0x35b] = 0;
     // high quality wireframe mode
-    ram[0x35c] = 0;
+//     ram[0x35c] = 0;
 
     if (show_screen)
         init_display();
