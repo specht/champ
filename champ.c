@@ -15,7 +15,7 @@
 #define ZERO                0x02
 #define INTERRUPT_DISABLE   0x04
 #define DECIMAL_MODE        0x08
-#define INTERRUPT_VECTORING 0x10
+// #define INTERRUPT_VECTORING 0x10
 #define OVERFLOW            0x40
 #define NEGATIVE            0x80
 
@@ -35,6 +35,9 @@ uint8_t trace_stack[0x100];
 uint8_t trace_stack_pointer = 0xff;
 uint16_t trace_stack_function[0x100];
 uint64_t cycles_per_function[0x10000];
+uint64_t last_frame_cycle_count = 0;
+uint64_t frame_cycle_count = 0;
+uint64_t frame_count = 0;
 
 int init_display()
 {
@@ -99,7 +102,7 @@ uint16_t yoffset[192] = {
 typedef struct {
     uint16_t ip;
     uint8_t sp;
-    uint32_t total_cycles;
+    uint64_t total_cycles;
     uint8_t a, x, y, flags;
 } r_cpu;
 
@@ -242,26 +245,46 @@ uint8_t ror(uint8_t x)
     return x;
 }
 
-void sbc(uint8_t value)
-{
-    uint8_t new_carry = (value > cpu.a) ? 1 : 0;
-    cpu.a -= value;
-    if (!test_flag(CARRY))
-    {
-        if (1 > cpu.a)
-            new_carry = 1;
-        cpu.a -= 1;
-    }
-    update_zero_and_negative_flags(cpu.a);
-    set_flag(CARRY, !new_carry);
-}
-
 void adc(uint8_t value)
 {
     uint16_t t16 = cpu.a + value + (test_flag(CARRY) ? 1 : 0);
-    set_flag(CARRY, t16 > 0xff);
     cpu.a = t16 & 0xff;
+    set_flag(CARRY, t16 > 0xff);
     update_zero_and_negative_flags(cpu.a);
+    set_flag(OVERFLOW, ((t16 ^ (uint16_t)cpu.a) & (t16 ^ (uint16_t)value) & 0x0080));
+
+    if (test_flag(DECIMAL_MODE))
+    {
+        set_flag(CARRY, 0);
+        if ((cpu.a & 0xf) > 0x9)
+            cpu.a += 0x60;
+        if ((cpu.a & 0xf0) > 0x90)
+        {
+            cpu.a += 0x60;
+            set_flag(CARRY, 1);
+        }
+    }
+}
+
+void sbc(uint8_t value)
+{
+    uint16_t t16 = cpu.a + ((uint16_t)value ^ 0xff) + (test_flag(CARRY) ? 1 : 0);
+    cpu.a = t16 & 0xff;
+    set_flag(CARRY, t16 > 0xff);
+    update_zero_and_negative_flags(cpu.a);
+    set_flag(OVERFLOW, ((t16 ^ (uint16_t)cpu.a) & (t16 ^ (uint16_t)value) & 0x0080));
+    if (test_flag(DECIMAL_MODE))
+    {
+        set_flag(CARRY, 0);
+        cpu.a -= 0x66;
+        if ((cpu.a & 0xf) > 0x9)
+            cpu.a += 0x60;
+        if ((cpu.a & 0xf0) > 0x90)
+        {
+            cpu.a += 0x60;
+            set_flag(CARRY, 1);
+        }
+    }
 }
 
 #define OPCODES \
@@ -658,7 +681,6 @@ void handle_next_opcode()
     {
         case ADC:
             adc((addressing_mode == immediate) ? immediate_value : read8(target_address));
-            set_flag(OVERFLOW, test_flag(CARRY) ^ test_flag(NEGATIVE));
             break;
         case AND:
             t8 = (addressing_mode == immediate) ? immediate_value : read8(target_address);
@@ -714,11 +736,7 @@ void handle_next_opcode()
             unhandled_opcode = 1;
             break;
         case BVC:
-            if (old_ip == 0xf5b0)
-                // TODO: REMOVE THIS HACK
-                branch(1, relative_offset, &cycles);
-            else
-                branch(!test_flag(OVERFLOW), relative_offset, &cycles);
+            branch(!test_flag(OVERFLOW), relative_offset, &cycles);
             break;
         case BVS:
             branch(test_flag(OVERFLOW), relative_offset, &cycles);
@@ -795,18 +813,6 @@ void handle_next_opcode()
             break;
         case JSR:
             // push IP - 1 because target address has already been read
-//             if (label_for_address[target_address] >= 0)
-//             {
-//                 for (int i = trace_stack_pointer; i < 0xff; i++)
-//                     printf("  ");
-//                 printf("JSR: %s\n", LABELS[label_for_address[target_address]]);
-//             }
-//             else
-//             {
-//                 for (int i = trace_stack_pointer; i < 0xff; i++)
-//                     printf("  ");
-//                 printf("JSR: %04x\n", target_address);
-//             }
             trace_stack_function[trace_stack_pointer] = target_address;
             trace_stack[trace_stack_pointer] = cpu.sp;
             trace_stack_pointer--;
@@ -910,12 +916,7 @@ void handle_next_opcode()
             if (trace_stack[trace_stack_pointer + 1] == cpu.sp + 2)
             {
                 trace_stack_pointer++;
-//                 for (int i = trace_stack_pointer; i < 0xff; i++)
-//                     printf("  ");
-//                 printf("RTS: .... %02x\n", cpu.sp + 2);
             }
-//             else
-//                 printf("ommitting RTS from stack trace...\n");
 
             t16 = pop();
             t16 |= ((uint16_t)pop()) << 8;
@@ -923,7 +924,6 @@ void handle_next_opcode()
             break;
         case SBC:
             sbc((addressing_mode == immediate) ? immediate_value : read8(target_address));
-            set_flag(OVERFLOW, test_flag(CARRY) ^ test_flag(NEGATIVE));
             break;
         case SEC:
             set_flag(CARRY, 1);
@@ -1045,6 +1045,10 @@ int main(int argc, char** argv)
     memset(cycles_per_function, 0, sizeof(cycles_per_function));
 
     load(argv[argc - 1], 0);
+    // rotation mode
+    ram[0x35b] = 0;
+    // high quality wireframe mode
+    ram[0x35c] = 0;
 
     if (show_screen)
         init_display();
@@ -1060,6 +1064,19 @@ int main(int argc, char** argv)
 //         if (cpu.ip >= 0xf5b2)
 //             printf("*** ");
         handle_next_opcode();
+        if (cpu.ip == 0x6404)
+        {
+            if (last_frame_cycle_count > 0)
+            {
+                frame_cycle_count += (cpu.total_cycles - last_frame_cycle_count);
+                frame_count += 1;
+//                     printf("%ld\n", (cpu.total_cycles - last_frame_cycle_count));
+//                     printf("%d\n", (uint64_t)((double)frame_cycle_count / frame_count));
+                if (frame_count >= 100)
+                    break;
+            }
+            last_frame_cycle_count = cpu.total_cycles;
+        }
 //         if (cycles)
 //         {
 // //             struct timespec tlap = {0, 0};
@@ -1101,6 +1118,7 @@ int main(int argc, char** argv)
         }
     }
     printf("Total cycles: %d\n", cpu.total_cycles);
+    printf("Cycles per frame: %d\n", (uint64_t)((double)frame_cycle_count / frame_count));
     for (uint32_t i = 0; i < 0x10000; i++)
     {
         if (cycles_per_function[i] > 0)
