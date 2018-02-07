@@ -27,6 +27,7 @@ symbols.uniq!
 symbols.sort! { |a, b| a.downcase <=> b.downcase }
 
 File::open('labels.h', 'w') do |f|
+    f.puts "const uint16_t LABEL_COUNT = #{symbols.size};"
     f.puts "const char* LABELS[] = {";
     line_length = 0
     f.print '    '
@@ -60,6 +61,8 @@ File::open('labels.h', 'w') do |f|
     end
     f.puts "};";
 end
+
+puts "Found #{symbols.size} labels."
 
 # label_for_address.keys.sort.each do |address|
 #     puts sprintf("%04x %s", address, label_for_address[address])

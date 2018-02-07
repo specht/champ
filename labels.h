@@ -1,3 +1,4 @@
+const uint16_t LABEL_COUNT = 692;
 const char* LABELS[] = {
     "]active_col", "]andmask", "]cur_line", "]cur_pix", "]hbash", 
     "]hbasl", "]lftbit", "]lftbyte", "]line", "]offset", "]repting", 

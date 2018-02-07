@@ -40,6 +40,10 @@ uint64_t last_frame_cycle_count = 0;
 uint64_t frame_cycle_count = 0;
 uint64_t frame_count = 0;
 
+uint16_t start_pc = 0x6000;
+uint16_t start_frame_pc = 0xffff;
+uint64_t max_frames = 0;
+
 int init_display()
 {
     dsp = XOpenDisplay(NULL);
@@ -129,11 +133,11 @@ void load(char* path, uint16_t offset)
     f = fopen(path, "rw");
     if (!f)
     {
-        printf("Error reading file: %s\n", path);
+        fprintf(stderr, "Error reading file: %s\n", path);
         exit(1);
     }
     size = fread(buffer, 1, 0x10000, f);
-    printf("Read 0x%04x bytes from %s, saved to 0x%04x.\n", (int)size, path, offset);
+    fprintf(stderr, "Read 0x%04x bytes from %s, saved to 0x%04x.\n", (int)size, path, offset);
     memcpy(ram + offset, buffer, size);
     fclose(f);
 }
@@ -177,7 +181,7 @@ void push(uint8_t value)
 {
     if (cpu.sp == 0)
     {
-        printf("Stack overflow!\n");
+        fprintf(stderr, "Stack overflow!\n");
         exit(1);
     }
     ram[(uint16_t)cpu.sp + 0x100] = value;
@@ -188,7 +192,7 @@ uint8_t pop()
 {
     if (cpu.sp == 0xff)
     {
-        printf("Stack underrun!\n");
+        fprintf(stderr, "Stack underrun!\n");
         exit(1);
     }
     cpu.sp++;
@@ -602,7 +606,7 @@ void handle_next_opcode()
 
     if (opcode == NO_OPCODE || addressing_mode == NO_ADDRESSING_MODE)
     {
-        printf("Unhandled opcode at %04x: %02x\n", old_ip, read_opcode);
+        fprintf(stderr, "Unhandled opcode at %04x: %02x\n", old_ip, read_opcode);
         exit(1);
     }
 
@@ -662,7 +666,7 @@ void handle_next_opcode()
 
     if (show_log)
     {
-        printf("%04x | %d | %02x | %s %-18s | ", old_ip, cycles, read_opcode, OPCODE_STRINGS[opcode],
+        fprintf(stderr, "%04x | %d | %02x | %s %-18s | ", old_ip, cycles, read_opcode, OPCODE_STRINGS[opcode],
             ADDRESSING_MODE_STRINGS[addressing_mode]
         );
     }
@@ -971,7 +975,7 @@ void handle_next_opcode()
     };
     if (unhandled_opcode)
     {
-        printf("Opcode not implemented yet!\n");
+        fprintf(stderr, "Opcode not implemented yet!\n");
         exit(1);
     }
     cpu.total_cycles += cycles;
@@ -987,9 +991,9 @@ void handle_next_opcode()
         flags_str[4] = test_flag(NEGATIVE) ? 'N' : 'n';
         flags_str[5] = 0;
 
-        printf("A: %02x, X: %02x, Y: %02x, PC: %04x, SP: %02x, FLAGS: %02x %s | %10ld |",
+        fprintf(stderr, "A: %02x, X: %02x, Y: %02x, PC: %04x, SP: %02x, FLAGS: %02x %s | %10ld |",
                cpu.a, cpu.x, cpu.y, cpu.ip, cpu.sp, cpu.flags, flags_str, cpu.total_cycles);
-        printf("\n");
+        fprintf(stderr, "\n");
     }
 }
 
@@ -1018,6 +1022,17 @@ void render_hires_screen()
     }
 }
 
+int32_t find_address_for_label(const char* label)
+{
+    for (int i = 0; i < LABEL_COUNT; i++)
+        if ((strlen(label) == strlen(LABELS[i])) &&
+            (strcmp(label, LABELS[i]) == 0))
+            for (int k = 0; k < 0x10000; k++)
+                if (label_for_address[k] == i)
+                    return k;
+    return -1;
+}
+
 int main(int argc, char** argv)
 {
     if (argc < 2)
@@ -1027,31 +1042,62 @@ int main(int argc, char** argv)
         printf("Options:\n");
         printf("  --show-screen\n");
         printf("  --hide-log\n");
+        printf("  --start-pc <address or label>\n");
+        printf("  --frame-start <address or label>\n");
+        printf("  --max-frames <n>\n");
         exit(1);
     }
 
-    for (int i = 1; i < argc; i++)
+    for (int i = 1; i < argc - 1; i++)
     {
         if (strcmp(argv[i], "--show-screen") == 0)
             show_screen = 1;
-        if (strcmp(argv[i], "--hide-log") == 0)
+        else if (strcmp(argv[i], "--hide-log") == 0)
             show_log = 0;
+        else if (strcmp(argv[i], "--start-pc") == 0)
+        {
+            char *temp = argv[++i];
+            char *p = 0;
+            start_pc = strtol(temp, &p, 0);
+            if (p == temp)
+                start_pc = find_address_for_label(temp);
+            fprintf(stderr, "Using start PC: 0x%04x\n", start_pc);
+        }
+        else if (strcmp(argv[i], "--start-frame") == 0)
+        {
+            char *temp = argv[++i];
+            char *p = 0;
+            start_frame_pc = strtol(temp, &p, 0);
+            if (p == temp)
+                start_frame_pc = find_address_for_label(temp);
+            fprintf(stderr, "Using frame start: 0x%04x\n", start_frame_pc);
+        }
+        else if (strcmp(argv[i], "--max-frames") == 0)
+        {
+            char *temp = argv[++i];
+            char *p = 0;
+            max_frames = strtol(temp, &p, 0);
+            if (p == temp)
+                max_frames = find_address_for_label(temp);
+            fprintf(stderr, "Max frames: %d\n", max_frames);
+        }
+        else
+        {
+            fprintf(stderr, "Unknown argument: %s\n", argv[i]);
+            exit(1);
+        }
     }
     memset(ram, 0, sizeof(ram));
     memset(cycles_per_function, 0, sizeof(cycles_per_function));
     memset(calls_per_function, 0, sizeof(calls_per_function));
 
     load(argv[argc - 1], 0);
-    // rotation mode
-//     ram[0x35b] = 0;
-    // high quality wireframe mode
-//     ram[0x35c] = 0;
 
     if (show_screen)
         init_display();
 
     init_cpu(&cpu);
-    cpu.ip = 0x6017;
+    cpu.ip = start_pc;
     struct timespec tstart = {0, 0};
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     unsigned long start_time = tstart.tv_sec * 1000000000 + tstart.tv_nsec;
@@ -1061,7 +1107,7 @@ int main(int argc, char** argv)
 //         if (cpu.ip >= 0xf5b2)
 //             printf("*** ");
         handle_next_opcode();
-        if (cpu.ip == 0x6404)
+        if ((start_frame_pc != 0xffff) && (cpu.ip == start_frame_pc))
         {
             if (last_frame_cycle_count > 0)
             {
@@ -1114,8 +1160,8 @@ int main(int argc, char** argv)
             }
         }
     }
-    printf("Total cycles: %d\n", cpu.total_cycles);
-    printf("Cycles per frame: %d\n", (uint64_t)((double)frame_cycle_count / frame_count));
+    fprintf(stderr, "Total cycles: %d\n", cpu.total_cycles);
+    fprintf(stderr, "Cycles per frame: %d\n", (uint64_t)((double)frame_cycle_count / frame_count));
     for (uint32_t i = 0; i < 0x10000; i++)
     {
         if (cycles_per_function[i] > 0)
