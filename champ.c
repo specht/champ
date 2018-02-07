@@ -35,6 +35,7 @@ uint8_t trace_stack[0x100];
 uint8_t trace_stack_pointer = 0xff;
 uint16_t trace_stack_function[0x100];
 uint64_t cycles_per_function[0x10000];
+uint64_t calls_per_function[0x10000];
 uint64_t last_frame_cycle_count = 0;
 uint64_t frame_cycle_count = 0;
 uint64_t frame_count = 0;
@@ -816,6 +817,7 @@ void handle_next_opcode()
             trace_stack_function[trace_stack_pointer] = target_address;
             trace_stack[trace_stack_pointer] = cpu.sp;
             trace_stack_pointer--;
+            calls_per_function[target_address]++;
 
             push(((cpu.ip - 1) >> 8) & 0xff);
             push((cpu.ip - 1) & 0xff);
@@ -1043,6 +1045,7 @@ int main(int argc, char** argv)
     }
     memset(ram, 0, sizeof(ram));
     memset(cycles_per_function, 0, sizeof(cycles_per_function));
+    memset(calls_per_function, 0, sizeof(calls_per_function));
 
     load(argv[argc - 1], 0);
     // rotation mode
@@ -1123,8 +1126,10 @@ int main(int argc, char** argv)
     {
         if (cycles_per_function[i] > 0)
         {
-            printf("%12d %5.2f%% %04x", cycles_per_function[i],
-                   cycles_per_function[i] * 100.0 / cpu.total_cycles, i);
+            printf("%12d %5.2f%% %8d %04x", cycles_per_function[i],
+                   cycles_per_function[i] * 100.0 / cpu.total_cycles,
+                   cycles_per_function[i] / calls_per_function[i],
+                   i);
             if (label_for_address[i] >= 0)
                 printf(" %s", LABELS[label_for_address[i]]);
             printf("\n");
