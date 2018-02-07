@@ -1051,7 +1051,7 @@ int main(int argc, char** argv)
         init_display();
 
     init_cpu(&cpu);
-    cpu.ip = 0x6000;
+    cpu.ip = 0x6017;
     struct timespec tstart = {0, 0};
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     unsigned long start_time = tstart.tv_sec * 1000000000 + tstart.tv_nsec;
