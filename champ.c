@@ -197,12 +197,6 @@ uint8_t pop()
 
 void set_flag(int which, int value)
 {
-    // TODO: Implement decimal mode (BCD)
-//     if ((which == DECIMAL_MODE) && value)
-//     {
-//         printf("Decimal flag not implemented yet!");
-//         exit(1);
-//     }
     cpu.flags &= ~which;
     if (value)
         cpu.flags |= which;
@@ -258,7 +252,7 @@ void adc(uint8_t value)
     {
         set_flag(CARRY, 0);
         if ((cpu.a & 0xf) > 0x9)
-            cpu.a += 0x60;
+            cpu.a += 0x06;
         if ((cpu.a & 0xf0) > 0x90)
         {
             cpu.a += 0x60;
@@ -279,7 +273,7 @@ void sbc(uint8_t value)
         set_flag(CARRY, 0);
         cpu.a -= 0x66;
         if ((cpu.a & 0xf) > 0x9)
-            cpu.a += 0x60;
+            cpu.a += 0x06;
         if ((cpu.a & 0xf0) > 0x90)
         {
             cpu.a += 0x60;
