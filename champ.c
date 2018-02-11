@@ -181,16 +181,16 @@ void refresh_watches(uint16_t address)
             switch (WATCH_TYPES[i])
             {
                 case WATCH_U8:
-                    value = (uint8_t)ram[address];
+                    value = (uint8_t)read8(address);
                     break;
                 case WATCH_S8:
-                    value = (int8_t)ram[address];
+                    value = (int8_t)read8(address);
                     break;
                 case WATCH_U16:
-                    value = (uint16_t)ram[address];
+                    value = (uint16_t)read16(address);
                     break;
                 case WATCH_S16:
-                    value = (int16_t)ram[address];
+                    value = (int16_t)read16(address);
                     break;
             }
             fprintf(watches_file, "0x%04x %s %d\n", cpu.ip, WATCH_LABELS[i], value);
