@@ -4,7 +4,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 #include "labels.h"
+#include "watches.h"
 
 #define SCALE 4
 #define SCREEN_WIDTH 280
@@ -43,6 +45,7 @@ uint64_t frame_count = 0;
 uint16_t start_pc = 0x6000;
 uint16_t start_frame_pc = 0xffff;
 uint64_t max_frames = 0;
+FILE *watches_file = 0;
 
 int init_display()
 {
@@ -166,15 +169,48 @@ uint16_t read16(uint16_t address)
     return result;
 }
 
+void refresh_watches(uint16_t address)
+{
+    for (int i = 0; i < WATCH_COUNT; i++)
+    {
+        if ((WATCH_ADDRESSES[i] == address) ||
+            ((WATCH_TYPES[i] == WATCH_U16 || WATCH_TYPES[i] == WATCH_S16) &&
+                (WATCH_ADDRESSES[i] == address + 1)))
+        {
+            int32_t value = 0;
+            switch (WATCH_TYPES[i])
+            {
+                case WATCH_U8:
+                    value = (uint8_t)ram[address];
+                    break;
+                case WATCH_S8:
+                    value = (int8_t)ram[address];
+                    break;
+                case WATCH_U16:
+                    value = (uint16_t)ram[address];
+                    break;
+                case WATCH_S16:
+                    value = (int16_t)ram[address];
+                    break;
+            }
+            fprintf(watches_file, "0x%04x %s %d\n", cpu.ip, WATCH_LABELS[i], value);
+        }
+    }
+}
+
 void write8(uint16_t address, uint8_t value)
 {
     ram[address] = value;
+    if (watches_file)
+        refresh_watches(address);
 }
 
 void write16(uint16_t address, uint16_t value)
 {
     ram[address] = value & 0xff;
     ram[address + 1] = (value >> 8) & 0xff;
+    if (watches_file)
+        refresh_watches(address);
 }
 
 void push(uint8_t value)
@@ -1045,6 +1081,7 @@ int main(int argc, char** argv)
         printf("  --start-pc <address or label>\n");
         printf("  --frame-start <address or label>\n");
         printf("  --max-frames <n>\n");
+        printf("  --watches <output filename>\n");
         exit(1);
     }
 
@@ -1080,6 +1117,17 @@ int main(int argc, char** argv)
             if (p == temp)
                 max_frames = find_address_for_label(temp);
             fprintf(stderr, "Max frames: %d\n", max_frames);
+        }
+        else if (strcmp(argv[i], "--watches") == 0)
+        {
+            const char* filename = argv[++i];
+            if (access(filename, F_OK) != -1)
+            {
+                fprintf(stderr, "Watch output file exists: %s, exiting...\n", filename);
+                exit(1);
+            }
+            watches_file = fopen(filename, "w");
+            fprintf(stderr, "Writing watches to %s.\n", filename);
         }
         else
         {
@@ -1178,5 +1226,7 @@ int main(int argc, char** argv)
             printf("\n");
         }
     }
+    if (watches_file)
+        fclose(watches_file);
     return 0;
 }
