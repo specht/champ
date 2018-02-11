@@ -1162,12 +1162,15 @@ int main(int argc, char** argv)
     }
     fprintf(stderr, "Total cycles: %d\n", cpu.total_cycles);
     fprintf(stderr, "Cycles per frame: %d\n", (uint64_t)((double)frame_cycle_count / frame_count));
+    printf("%12s %6s %8s %8s %4s %s\n", "Total CC", "% CC", "Calls", "CC/Call", "Addr", "Label");
     for (uint32_t i = 0; i < 0x10000; i++)
     {
         if (cycles_per_function[i] > 0)
         {
-            printf("%12d %5.2f%% %8d %04x", cycles_per_function[i],
+            printf("%12d %5.2f%% %8d %8d %04x",
+                   cycles_per_function[i],
                    cycles_per_function[i] * 100.0 / cpu.total_cycles,
+                   calls_per_function[i],
                    cycles_per_function[i] / calls_per_function[i],
                    i);
             if (label_for_address[i] >= 0)
