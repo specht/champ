@@ -175,22 +175,22 @@ void refresh_watches(uint16_t address)
     {
         if ((WATCH_ADDRESSES[i] == address) ||
             ((WATCH_TYPES[i] == WATCH_U16 || WATCH_TYPES[i] == WATCH_S16) &&
-                (WATCH_ADDRESSES[i] == address + 1)))
+                (WATCH_ADDRESSES[i] == address - 1)))
         {
             int32_t value = 0;
             switch (WATCH_TYPES[i])
             {
                 case WATCH_U8:
-                    value = (uint8_t)read8(address);
+                    value = (uint8_t)read8(WATCH_ADDRESSES[i]);
                     break;
                 case WATCH_S8:
-                    value = (int8_t)read8(address);
+                    value = (int8_t)read8(WATCH_ADDRESSES[i]);
                     break;
                 case WATCH_U16:
-                    value = (uint16_t)read16(address);
+                    value = (uint16_t)read16(WATCH_ADDRESSES[i]);
                     break;
                 case WATCH_S16:
-                    value = (int16_t)read16(address);
+                    value = (int16_t)read16(WATCH_ADDRESSES[i]);
                     break;
             }
             fprintf(watches_file, "0x%04x %s %d\n", cpu.ip, WATCH_LABELS[i], value);
@@ -201,14 +201,6 @@ void refresh_watches(uint16_t address)
 void write8(uint16_t address, uint8_t value)
 {
     ram[address] = value;
-    if (watches_file)
-        refresh_watches(address);
-}
-
-void write16(uint16_t address, uint16_t value)
-{
-    ram[address] = value & 0xff;
-    ram[address + 1] = (value >> 8) & 0xff;
     if (watches_file)
         refresh_watches(address);
 }
