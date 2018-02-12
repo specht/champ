@@ -1,8 +1,11 @@
 #!/usr/bin/env ruby
 
+require 'yaml'
+
 label_for_address = {}
 symbols = []
 watches = []
+arg_watches = []
 
 File::open('plot3d20_Output.txt') do |f|
     f.each_line do |line|
@@ -18,6 +21,7 @@ File::open('plot3d20_Output.txt') do |f|
             address = $1
         end
         watch_this = symbol.match(/~(u8|s8|u16|s16)/)
+        watch_args = symbol.scan(/(@(u8|s8|u16|s16)[AXY])/).map { |x| x.first }
         symbol = symbol.strip.split(' ').first
         next if address.nil?
         label_for_address[address.to_i(16)] = symbol
@@ -28,6 +32,11 @@ File::open('plot3d20_Output.txt') do |f|
                 :label => symbol,
                 :type => watch_this[1]
             }
+        end
+        watch_args.each do |watch_arg|
+            arg_watches << {:register => watch_arg[watch_arg.size - 1],
+                            :type => watch_arg.sub('@', '')[0, watch_arg.size - 2],
+                            :address => address.to_i(16)}
         end
     end
 end
@@ -85,6 +94,26 @@ File::open('watches.h', 'w') do |f|
     f.puts "};"
     f.puts "const uint8_t WATCH_TYPES[] = {";
     f.puts watches.map { |x| "    #{types.index(x[:type]) + 1}" }.join(",\n");
+    f.puts "};"
+
+    f.puts "const uint16_t ARG_WATCH_COUNT = #{arg_watches.size};"
+    types = ['u8', 'u16', 's8', 's16'];
+    f.puts "const uint16_t ARG_WATCH_ADDRESSES[] = {";
+    f.puts arg_watches.map { |x| "    #{sprintf('0x%04x', x[:address])}" }.join(",\n");
+    f.puts "};"
+    f.puts "const uint8_t ARG_WATCH_TYPES[] = {";
+    f.puts arg_watches.map { |x| "    #{types.index(x[:type]) + 1}" }.join(",\n");
+    f.puts "};"
+    registers = ['A', 'X', 'Y']
+    registers.each.with_index do |x, _|
+        f.puts "#define WATCH_#{x} #{_ + 1}"
+    end
+    f.puts "const uint8_t ARG_WATCH_REGISTERS[] = {";
+    f.puts arg_watches.map { |x| "    #{registers.index(x[:register]) + 1}" }.join(",\n");
+    f.puts "};"
+    f.puts "const char* WATCH_REGISTER_LABELS[] = {";
+    f.puts "    \"\","
+    f.puts registers.map { |x| "    \"#{x}\"" }.join(",\n");
     f.puts "};"
 end
 

@@ -171,6 +171,7 @@ uint16_t read16(uint16_t address)
 
 void refresh_watches(uint16_t address)
 {
+    // refresh global variable watches after write at address
     for (int i = 0; i < WATCH_COUNT; i++)
     {
         if ((WATCH_ADDRESSES[i] == address) ||
@@ -193,7 +194,7 @@ void refresh_watches(uint16_t address)
                     value = (int16_t)read16(WATCH_ADDRESSES[i]);
                     break;
             }
-            fprintf(watches_file, "0x%04x %s %d\n", cpu.ip, WATCH_LABELS[i], value);
+            fprintf(watches_file, "~ 0x%04x %s %d\n", cpu.ip, WATCH_LABELS[i], value);
         }
     }
 }
@@ -1144,8 +1145,39 @@ int main(int argc, char** argv)
     uint32_t next_display_refresh = 0;
     uint8_t old_screen_number = 0;
     while (1) {
-//         if (cpu.ip >= 0xf5b2)
-//             printf("*** ");
+        if (watches_file)
+        {
+            // handle register watches for certain IP locations
+            uint8_t printed_reg_watches = 0;
+            for (int i = 0; i < ARG_WATCH_COUNT; i++)
+            {
+                if (cpu.ip == ARG_WATCH_ADDRESSES[i])
+                {
+                    int32_t value = 0;
+                    uint8_t reg = 0;
+                    if (ARG_WATCH_REGISTERS[i] == WATCH_A)
+                        reg = cpu.a;
+                    else if (ARG_WATCH_REGISTERS[i] == WATCH_X)
+                        reg = cpu.x;
+                    else if (ARG_WATCH_REGISTERS[i] == WATCH_Y)
+                        reg = cpu.y;
+                    if (ARG_WATCH_TYPES[i] == WATCH_S8)
+                        value = (int8_t)reg;
+                    else
+                        value = (uint8_t)reg;
+                    if (!printed_reg_watches)
+                        fprintf(watches_file, "@ 0x%04x ", cpu.ip);
+                    else
+                        fprintf(watches_file, ", ");
+                    fprintf(watches_file, "%s %d",
+                           WATCH_REGISTER_LABELS[ARG_WATCH_REGISTERS[i]],
+                           value);
+                    printed_reg_watches = 1;
+                }
+            }
+            if (printed_reg_watches)
+                fprintf(watches_file, "\n");
+        }
         handle_next_opcode();
         if ((start_frame_pc != 0xffff) && (cpu.ip == start_frame_pc))
         {

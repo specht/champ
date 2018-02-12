@@ -4,11 +4,20 @@ vars = {}
 
 File::open(ARGV.first) do |f|
     f.each_line do |line|
-        parts = line.split(' ')
-        name = parts[1]
-        value = parts[2].to_i
-        vars[name] ||= []
-        vars[name] << value
+        if line[0] == '~'
+            parts = line.split(' ')
+            name = parts[2]
+            value = parts[3].to_i
+            vars[name] ||= []
+            vars[name] << value
+        elsif line[0] == '@'
+            address = line.split(' ')[1].sub('0x', '').to_i(16)
+            rest = line[line.index(' ', 2), line.size].strip
+            rest.split(',').each do |part|
+                part.strip!
+#                 puts part
+            end
+        end
     end
 end
 
