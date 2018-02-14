@@ -1,6 +1,6 @@
 # Champ - N. Harold Cham's 65C02 Profiler
 
-This is a 65C02 emulator / profiler that enables you to really get to know your APPLE ][ HiRes Graphics Mode Demo. This example uses [Marc Golombeck's excellent 3D-Demo](https://github.com/mgolombeck/3D-Demo).
+This is a 65C02 emulator / profiler that enables you to really get to know your APPLE ][ HiRes Graphics Mode Demo. This example uses [Marc A. Golombeck's excellent 3D-Demo](https://github.com/mgolombeck/3D-Demo).
 
 ## Features
 
