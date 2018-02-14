@@ -44,6 +44,10 @@ $ ./champ.rb --max-frames 100 plot3d.yaml
 
 This will run the emulator and write the HTML report to `report.html`. If you do not specify the maximum number of frames, you can still cancel the emulator by pressing Ctrl+C at any time. If you need fast results and don't need the animated GIF of all frames, specify the `--no-animation` flag, which will still give you all the information but without the animation.
 
+## Example report
+
 ![Champ Screenshot](doc/screenshot.png?raw=true "Fig. 1 Champ Screenshot")
+
+## Did you know?
 
 By the way, there's a full-fledged, standalone, no-dependencies GIF encoder in `pgif.c` that writes animated GIFs and uses some optimizations to further minimize space.
