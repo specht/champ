@@ -1,17 +1,12 @@
-#include <X11/Xlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include "labels.h"
-#include "watches.h"
 
-#define SCALE 4
 #define SCREEN_WIDTH 280
 #define SCREEN_HEIGHT 192
-#define SCREEN_REFRESH_EVERY_CYCLES 10000
 
 #define CARRY               0x01
 #define ZERO                0x02
@@ -21,15 +16,6 @@
 #define OVERFLOW            0x40
 #define NEGATIVE            0x80
 
-Display *dsp;
-Window win;
-GC gc;
-unsigned int white, black;
-Atom wmDelete;
-XEvent evt;
-KeyCode keyQ;
-
-uint8_t show_screen = 0;
 uint8_t show_log = 1;
 uint8_t show_call_stack = 0;
 
@@ -44,41 +30,6 @@ uint64_t frame_count = 0;
 
 uint16_t start_pc = 0x6000;
 uint16_t start_frame_pc = 0xffff;
-uint64_t max_frames = 0;
-FILE *watches_file = 0;
-
-int init_display()
-{
-    dsp = XOpenDisplay(NULL);
-    if (!dsp)
-        return 1;
-
-    int screen = DefaultScreen(dsp);
-    white = WhitePixel(dsp, screen);
-    black = BlackPixel(dsp, screen);
-
-    win = XCreateSimpleWindow(dsp, DefaultRootWindow(dsp), 0, 0,
-                              SCREEN_WIDTH * SCALE, SCREEN_HEIGHT * SCALE,
-                              0, black, black );
-
-    wmDelete = XInternAtom(dsp, "WM_DELETE_WINDOW", True);
-    XSetWMProtocols(dsp, win, &wmDelete, 1);
-
-    gc = XCreateGC(dsp, win, 0, NULL);
-
-//     XSetForeground(dsp, gc, white);
-
-    long eventMask = StructureNotifyMask;
-    eventMask |= ButtonPressMask|ButtonReleaseMask|KeyPressMask|KeyReleaseMask;
-    XSelectInput(dsp, win, eventMask);
-
-    keyQ = XKeysymToKeycode(dsp, XStringToKeysym("Q"));
-
-    XMapWindow(dsp, win);
-
-    // wait until window appears
-    do { XNextEvent(dsp,&evt); } while (evt.type != MapNotify);
-}
 
 uint16_t yoffset[192] = {
     0x0000, 0x0400, 0x0800, 0x0c00, 0x1000, 0x1400, 0x1800, 0x1c00,
@@ -108,7 +59,7 @@ uint16_t yoffset[192] = {
 };
 
 typedef struct {
-    uint16_t ip;
+    uint16_t pc;
     uint8_t sp;
     uint64_t total_cycles;
     uint8_t a, x, y, flags;
@@ -116,7 +67,7 @@ typedef struct {
 
 void init_cpu(r_cpu* cpu)
 {
-    cpu->ip = 0;
+    cpu->pc = 0;
     cpu->sp = 0xff;
     cpu->total_cycles = 0;
     cpu->a = 0;
@@ -127,6 +78,27 @@ void init_cpu(r_cpu* cpu)
 
 uint8_t ram[0x10000];
 r_cpu cpu;
+
+typedef struct {
+    uint32_t index;
+    uint16_t pc;
+    uint8_t post;
+    enum {
+        u8, s8, u16, s16
+    } data_type;
+    enum
+    {
+        MEMORY,
+        REGISTER_A,
+        REGISTER_X,
+        REGISTER_Y
+    } type;
+    uint16_t memory_address;
+} r_watch;
+
+r_watch *watches = 0;
+size_t watch_count = 0;
+int32_t watch_offset_for_pc_and_post[0x20000];
 
 void load(char* path, uint16_t offset)
 {
@@ -140,20 +112,19 @@ void load(char* path, uint16_t offset)
         exit(1);
     }
     size = fread(buffer, 1, 0x10000, f);
-    fprintf(stderr, "Read 0x%04x bytes from %s, saved to 0x%04x.\n", (int)size, path, offset);
     memcpy(ram + offset, buffer, size);
     fclose(f);
 }
 
-uint8_t rip8()
+uint8_t rpc8()
 {
-    return ram[cpu.ip++];
+    return ram[cpu.pc++];
 }
 
-uint16_t rip16()
+uint16_t rpc16()
 {
-    uint16_t result = rip8();
-    result |= ((uint16_t)rip8()) << 8;
+    uint16_t result = rpc8();
+    result |= ((uint16_t)rpc8()) << 8;
     return result;
 }
 
@@ -169,41 +140,9 @@ uint16_t read16(uint16_t address)
     return result;
 }
 
-void refresh_watches(uint16_t address)
-{
-    // refresh global variable watches after write at address
-    for (int i = 0; i < WATCH_COUNT; i++)
-    {
-        if ((WATCH_ADDRESSES[i] == address) ||
-            ((WATCH_TYPES[i] == WATCH_U16 || WATCH_TYPES[i] == WATCH_S16) &&
-                (WATCH_ADDRESSES[i] == address - 1)))
-        {
-            int32_t value = 0;
-            switch (WATCH_TYPES[i])
-            {
-                case WATCH_U8:
-                    value = (uint8_t)read8(WATCH_ADDRESSES[i]);
-                    break;
-                case WATCH_S8:
-                    value = (int8_t)read8(WATCH_ADDRESSES[i]);
-                    break;
-                case WATCH_U16:
-                    value = (uint16_t)read16(WATCH_ADDRESSES[i]);
-                    break;
-                case WATCH_S16:
-                    value = (int16_t)read16(WATCH_ADDRESSES[i]);
-                    break;
-            }
-            fprintf(watches_file, "~ 0x%04x %s %d\n", cpu.ip, WATCH_LABELS[i], value);
-        }
-    }
-}
-
 void write8(uint16_t address, uint8_t value)
 {
     ram[address] = value;
-    if (watches_file)
-        refresh_watches(address);
 }
 
 void push(uint8_t value)
@@ -365,7 +304,7 @@ const char* const ADDRESSING_MODE_STRINGS[] = { ADDRESSING_MODES };
 
 #define TEST_OPCODE(opcode) test_opcode = opcode;
 #define OPCODE_VARIANT(opcode, cycles, addressing_mode) \
-    if (opcode_from_ip == opcode) { \
+    if (opcode_from_pc == opcode) { \
         *_opcode = test_opcode; \
         *_addressing_mode = addressing_mode; \
         *_cycles = cycles; \
@@ -378,8 +317,8 @@ void fetch_next_opcode(uint8_t* _read_opcode, r_opcode* _opcode, r_addressing_mo
      * https://www.atarimax.com/jindroush.atari.org/aopc.html
      */
     r_opcode test_opcode = NO_OPCODE;
-    uint8_t opcode_from_ip = rip8();
-    *_read_opcode = opcode_from_ip;
+    uint8_t opcode_from_pc = rpc8();
+    *_read_opcode = opcode_from_pc;
 
     TEST_OPCODE(ADC)
         OPCODE_VARIANT(0x69, 2, immediate)
@@ -477,7 +416,7 @@ void fetch_next_opcode(uint8_t* _read_opcode, r_opcode* _opcode, r_addressing_mo
         OPCODE_VARIANT(0xE6, 5, zero_page)
         OPCODE_VARIANT(0xF6, 6, zero_page_x)
         OPCODE_VARIANT(0xEE, 6, absolute)
-        OPCODE_VARIANT(0xFe, 7, absolute_x)
+        OPCODE_VARIANT(0xFE, 7, absolute_x)
     TEST_OPCODE(JMP)
         OPCODE_VARIANT(0x4C, 3, absolute)
         OPCODE_VARIANT(0x6C, 5, indirect)
@@ -616,15 +555,15 @@ void branch(uint8_t condition, int8_t offset, uint8_t* cycles)
     {
         // branch succeeds
         *cycles += 1;
-        if ((cpu.ip & 0xfff0) != ((cpu.ip + offset) & 0xfff0))
+        if ((cpu.pc & 0xfff0) != ((cpu.pc + offset) & 0xfff0))
             *cycles += 1;
-        cpu.ip += offset;
+        cpu.pc += offset;
     }
 }
 
 void handle_next_opcode()
 {
-    uint16_t old_ip = cpu.ip;
+    uint16_t old_pc = cpu.pc;
 
     // fetch opcode, addressing mode and cycles for next instruction
     uint8_t read_opcode = 0;
@@ -635,7 +574,7 @@ void handle_next_opcode()
 
     if (opcode == NO_OPCODE || addressing_mode == NO_ADDRESSING_MODE)
     {
-        fprintf(stderr, "Unhandled opcode at %04x: %02x\n", old_ip, read_opcode);
+        fprintf(stderr, "Unhandled opcode at %04x: %02x\n", old_pc, read_opcode);
         exit(1);
     }
 
@@ -646,47 +585,47 @@ void handle_next_opcode()
     switch (addressing_mode)
     {
         case immediate:
-            immediate_value = rip8();
+            immediate_value = rpc8();
             break;
         case relative:
-            relative_offset = (int8_t)rip8();
+            relative_offset = (int8_t)rpc8();
             break;
         case absolute:
-            target_address = rip16();
+            target_address = rpc16();
             break;
         case zero_page:
-            target_address = rip8();
+            target_address = rpc8();
             break;
         case indirect:
-            target_address = read16(rip16());
+            target_address = read16(rpc16());
             break;
         case zero_page_indirect:
-            target_address = read16(rip8());
+            target_address = read16(rpc8());
             break;
         case zero_page_x:
-            target_address = (rip8() + cpu.x) % 0xff;
+            target_address = (rpc8() + cpu.x) % 0xff;
             break;
         case zero_page_y:
-            target_address = (rip8() + cpu.y) % 0xff;
+            target_address = (rpc8() + cpu.y) % 0xff;
             break;
         case absolute_x:
-            target_address = rip16();
+            target_address = rpc16();
             if ((target_address >> 12) != ((target_address + cpu.x) >> 12))
                 cycles += 1;
             target_address += cpu.x;
             break;
         case absolute_y:
-            target_address = rip16();
+            target_address = rpc16();
             if ((target_address >> 12) != ((target_address + cpu.y) >> 12))
                 cycles += 1;
             target_address += cpu.y;
             break;
         case indexed_indirect_x:
-            target_address = read16((rip8() + cpu.x) & 0xff);
+            target_address = read16((rpc8() + cpu.x) & 0xff);
             break;
         case indirect_indexed_y:
             target_address = cpu.y;
-            uint16_t temp = read16(rip8());
+            uint16_t temp = read16(rpc8());
             if ((target_address >> 12) != ((target_address + temp) >> 12))
                 cycles += 1;
             target_address += temp;
@@ -695,7 +634,7 @@ void handle_next_opcode()
 
     if (show_log)
     {
-        fprintf(stderr, "%04x | %d | %02x | %s %-18s | ", old_ip, cycles, read_opcode, OPCODE_STRINGS[opcode],
+        fprintf(stderr, "# %04x | %d | %02x | %s %-18s | ", old_pc, cycles, read_opcode, OPCODE_STRINGS[opcode],
             ADDRESSING_MODE_STRINGS[addressing_mode]
         );
     }
@@ -836,19 +775,21 @@ void handle_next_opcode()
             update_zero_and_negative_flags(cpu.y);
             break;
         case JMP:
-            cpu.ip = target_address;
+            cpu.pc = target_address;
             // TODO handle page boundary behaviour?
             break;
         case JSR:
-            // push IP - 1 because target address has already been read
+            // push PC - 1 because target address has already been read
             trace_stack_function[trace_stack_pointer] = target_address;
             trace_stack[trace_stack_pointer] = cpu.sp;
             trace_stack_pointer--;
             calls_per_function[target_address]++;
+            printf("jsr 0x%04x %d\n", target_address, cpu.total_cycles);
+            fflush(stdout);
 
-            push(((cpu.ip - 1) >> 8) & 0xff);
-            push((cpu.ip - 1) & 0xff);
-            cpu.ip = target_address;
+            push(((cpu.pc - 1) >> 8) & 0xff);
+            push((cpu.pc - 1) & 0xff);
+            cpu.pc = target_address;
             break;
         case LDA:
             cpu.a = (addressing_mode == immediate) ? immediate_value : read8(target_address);
@@ -939,17 +880,19 @@ void handle_next_opcode()
             cpu.flags = pop();
             t16 = pop();
             t16 |= ((uint16_t)pop()) << 8;
-            cpu.ip = t16;
+            cpu.pc = t16;
             break;
         case RTS:
             if (trace_stack[trace_stack_pointer + 1] == cpu.sp + 2)
             {
+                printf("rts %d\n", cpu.total_cycles);
+                fflush(stdout);
                 trace_stack_pointer++;
             }
 
             t16 = pop();
             t16 |= ((uint16_t)pop()) << 8;
-            cpu.ip = t16 + 1;
+            cpu.pc = t16 + 1;
             break;
         case SBC:
             sbc((addressing_mode == immediate) ? immediate_value : read8(target_address));
@@ -1004,7 +947,8 @@ void handle_next_opcode()
     };
     if (unhandled_opcode)
     {
-        fprintf(stderr, "Opcode not implemented yet!\n");
+        fprintf(stderr, "Opcode %s not implemented yet at PC 0x%04x\n",
+                OPCODE_STRINGS[opcode], cpu.pc);
         exit(1);
     }
     cpu.total_cycles += cycles;
@@ -1021,45 +965,88 @@ void handle_next_opcode()
         flags_str[5] = 0;
 
         fprintf(stderr, "A: %02x, X: %02x, Y: %02x, PC: %04x, SP: %02x, FLAGS: %02x %s | %10ld |",
-               cpu.a, cpu.x, cpu.y, cpu.ip, cpu.sp, cpu.flags, flags_str, cpu.total_cycles);
+               cpu.a, cpu.x, cpu.y, cpu.pc, cpu.sp, cpu.flags, flags_str, cpu.total_cycles);
         fprintf(stderr, "\n");
     }
 }
 
-void set_pixel(int px, int py, unsigned int color)
+int parse_int(const char* s, int base)
 {
-    int x, y;
-    XSetForeground(dsp, gc, color);
-    for (y = 0; y < SCALE; y++)
-        for (x = 0; x < SCALE; x++)
-            XDrawPoint(dsp, win, gc, px * SCALE + x, py * SCALE + y);
-}
-
-void render_hires_screen()
-{
-    uint8_t current_screen = ram[0x30b];
-    int x, y;
-    for (y = 0; y < 192; y++)
+    char *p = 0;
+    int i = strtol(s, &p, base);
+    if (p == s)
     {
-        uint16_t line_offset = yoffset[y] | (current_screen == 1 ? 0x2000 : 0x4000);
-        for (x = 0; x < 40; x++)
-        {
-            uint8_t byte = ram[line_offset + x];
-            for (int px = 0; px < 7; px++)
-                set_pixel(x * 7 + px, y, ((byte >> px) & 1) ? white : black);
-        }
+        fprintf(stderr, "Error parsing integer: %s", s);
+        exit(1);
     }
+    return i;
 }
 
-int32_t find_address_for_label(const char* label)
+void handle_watch(uint16_t pc, uint8_t post)
 {
-    for (int i = 0; i < LABEL_COUNT; i++)
-        if ((strlen(label) == strlen(LABELS[i])) &&
-            (strcmp(label, LABELS[i]) == 0))
-            for (int k = 0; k < 0x10000; k++)
-                if (label_for_address[k] == i)
-                    return k;
-    return -1;
+    int32_t offset = watch_offset_for_pc_and_post[((int32_t)pc << 1) | post];
+    if (offset == -1)
+        return;
+
+    int32_t old_index = -1;
+    while (watches[offset].pc == pc && watches[offset].post == post)
+    {
+        r_watch* watch = &watches[offset];
+        if (old_index == -1)
+        {
+            printf("watch %d", watch->index);
+        }
+        else
+            if (old_index != watch->index)
+                printf("\nwatch %d", watch->index);
+
+        old_index = watch->index;
+        int32_t value = 0;
+        if (watch->type == MEMORY)
+        {
+            switch (watch->data_type)
+            {
+                case u8:
+                    value = (uint8_t)read8(watch->memory_address);
+                    break;
+                case s8:
+                    value = (int8_t)read8(watch->memory_address);
+                    break;
+                case u16:
+                    value = (uint16_t)read16(watch->memory_address);
+                    break;
+                case s16:
+                    value = (int16_t)read16(watch->memory_address);
+                    break;
+                default:
+                    fprintf(stderr, "Invalid data type!\n");
+                    exit(1);
+            }
+            printf(" %d", value);
+        }
+        else
+        {
+            switch (watch->type)
+            {
+                case REGISTER_A:
+                    value = (watch->data_type == u8) ? (uint8_t)cpu.a : (int8_t)cpu.a;
+                    break;
+                case REGISTER_X:
+                    value = (watch->data_type == u8) ? (uint8_t)cpu.x : (int8_t)cpu.x;
+                    break;
+                case REGISTER_Y:
+                    value = (watch->data_type == u8) ? (uint8_t)cpu.y : (int8_t)cpu.y;
+                    break;
+                default:
+                    fprintf(stderr, "Invalid type!\n");
+                    exit(1);
+            }
+            printf(" %d", value);
+        }
+        offset++;
+    }
+    printf("\n");
+    fflush(stdout);
 }
 
 int main(int argc, char** argv)
@@ -1069,28 +1056,89 @@ int main(int argc, char** argv)
         printf("Usage: ./champ [options] <memory dump>\n");
         printf("\n");
         printf("Options:\n");
-        printf("  --show-screen\n");
         printf("  --hide-log\n");
         printf("  --start-pc <address or label>\n");
         printf("  --frame-start <address or label>\n");
         printf("  --max-frames <n>\n");
-        printf("  --watches <output filename>\n");
         exit(1);
+    }
+
+    for (int i = 0; i < 0x20000; i++)
+        watch_offset_for_pc_and_post[i] = -1;
+
+    char s[1024];
+    int watch_index = 0;
+    while (fgets(s, 1024, stdin))
+    {
+        if (!watches)
+        {
+            watch_count = parse_int(s, 0);
+            watches = malloc(sizeof(r_watch) * watch_count);
+        }
+        else
+        {
+            char *p = s;
+            r_watch watch;
+            memset(&watch, 0, sizeof(watch));
+            watch.index = parse_int(p, 0);
+            while (*(p++) != ',');
+            watch.pc = parse_int(p + 2, 16);
+            while (*(p++) != ',');
+            watch.post = parse_int(p, 0);
+            while (*(p++) != ',');
+            if (strncmp(p, "u8", 2) == 0)
+                watch.data_type = u8;
+            else if (strncmp(p, "s8", 2) == 0)
+                watch.data_type = s8;
+            else if (strncmp(p, "u16", 3) == 0)
+                watch.data_type = u16;
+            else if (strncmp(p, "s16", 3) == 0)
+                watch.data_type = s16;
+            else
+            {
+                fprintf(stderr, "Invalid data type!");
+                exit(1);
+            }
+            while (*(p++) != ',');
+            if (strncmp(p, "mem", 3) == 0)
+            {
+                watch.type = MEMORY;
+                while (*(p++) != ',');
+                watch.memory_address = parse_int(p + 2, 16);
+            }
+            else
+            {
+                while (*(p++) != ',');
+                if (strncmp(p, "A", 1) == 0)
+                    watch.type = REGISTER_A;
+                else if (strncmp(p, "X", 1) == 0)
+                    watch.type = REGISTER_X;
+                else if (strncmp(p, "Y", 1) == 0)
+                    watch.type = REGISTER_Y;
+            }
+            int32_t offset = (((int32_t)watch.pc) << 1) | watch.post;
+
+            if (watch_offset_for_pc_and_post[offset] == -1)
+                watch_offset_for_pc_and_post[offset] = watch_index;
+
+            watches[watch_index++] = watch;
+
+//             printf("watch index %d pc 0x%04x post %d data_type %d type %d memory_address 0x%04x offset %d value %d\n",
+//                    watch.index, watch.pc, watch.post, watch.data_type, watch.type,
+//                    watch.memory_address, offset, watch_offset_for_pc_and_post[offset]
+//             );
+        }
     }
 
     for (int i = 1; i < argc - 1; i++)
     {
-        if (strcmp(argv[i], "--show-screen") == 0)
-            show_screen = 1;
-        else if (strcmp(argv[i], "--hide-log") == 0)
+        if (strcmp(argv[i], "--hide-log") == 0)
             show_log = 0;
         else if (strcmp(argv[i], "--start-pc") == 0)
         {
             char *temp = argv[++i];
             char *p = 0;
             start_pc = strtol(temp, &p, 0);
-            if (p == temp)
-                start_pc = find_address_for_label(temp);
             fprintf(stderr, "Using start PC: 0x%04x\n", start_pc);
         }
         else if (strcmp(argv[i], "--start-frame") == 0)
@@ -1098,29 +1146,7 @@ int main(int argc, char** argv)
             char *temp = argv[++i];
             char *p = 0;
             start_frame_pc = strtol(temp, &p, 0);
-            if (p == temp)
-                start_frame_pc = find_address_for_label(temp);
             fprintf(stderr, "Using frame start: 0x%04x\n", start_frame_pc);
-        }
-        else if (strcmp(argv[i], "--max-frames") == 0)
-        {
-            char *temp = argv[++i];
-            char *p = 0;
-            max_frames = strtol(temp, &p, 0);
-            if (p == temp)
-                max_frames = find_address_for_label(temp);
-            fprintf(stderr, "Max frames: %d\n", max_frames);
-        }
-        else if (strcmp(argv[i], "--watches") == 0)
-        {
-            const char* filename = argv[++i];
-            if (access(filename, F_OK) != -1)
-            {
-                fprintf(stderr, "Watch output file exists: %s, exiting...\n", filename);
-                exit(1);
-            }
-            watches_file = fopen(filename, "w");
-            fprintf(stderr, "Writing watches to %s.\n", filename);
         }
         else
         {
@@ -1134,123 +1160,56 @@ int main(int argc, char** argv)
 
     load(argv[argc - 1], 0);
 
-    if (show_screen)
-        init_display();
-
     init_cpu(&cpu);
-    cpu.ip = start_pc;
+    cpu.pc = start_pc;
     struct timespec tstart = {0, 0};
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     unsigned long start_time = tstart.tv_sec * 1000000000 + tstart.tv_nsec;
     uint32_t next_display_refresh = 0;
     uint8_t old_screen_number = 0;
+    int last_cycles = -1;
     while (1) {
-        if (watches_file)
-        {
-            // handle register watches for certain IP locations
-            uint8_t printed_reg_watches = 0;
-            for (int i = 0; i < ARG_WATCH_COUNT; i++)
-            {
-                if (cpu.ip == ARG_WATCH_ADDRESSES[i])
-                {
-                    int32_t value = 0;
-                    uint8_t reg = 0;
-                    if (ARG_WATCH_REGISTERS[i] == WATCH_A)
-                        reg = cpu.a;
-                    else if (ARG_WATCH_REGISTERS[i] == WATCH_X)
-                        reg = cpu.x;
-                    else if (ARG_WATCH_REGISTERS[i] == WATCH_Y)
-                        reg = cpu.y;
-                    if (ARG_WATCH_TYPES[i] == WATCH_S8)
-                        value = (int8_t)reg;
-                    else
-                        value = (uint8_t)reg;
-                    if (!printed_reg_watches)
-                        fprintf(watches_file, "@ 0x%04x ", cpu.ip);
-                    else
-                        fprintf(watches_file, ", ");
-                    fprintf(watches_file, "%s %d",
-                           WATCH_REGISTER_LABELS[ARG_WATCH_REGISTERS[i]],
-                           value);
-                    printed_reg_watches = 1;
-                }
-            }
-            if (printed_reg_watches)
-                fprintf(watches_file, "\n");
-        }
+        handle_watch(cpu.pc, 0);
+        uint16_t old_pc = cpu.pc;
         handle_next_opcode();
-        if ((start_frame_pc != 0xffff) && (cpu.ip == start_frame_pc))
+        handle_watch(old_pc, 1);
+        if ((start_frame_pc != 0xffff) && (cpu.pc == start_frame_pc))
         {
             if (last_frame_cycle_count > 0)
             {
                 frame_cycle_count += (cpu.total_cycles - last_frame_cycle_count);
                 frame_count += 1;
-//                     printf("%ld\n", (cpu.total_cycles - last_frame_cycle_count));
-//                     printf("%d\n", (uint64_t)((double)frame_cycle_count / frame_count));
-                if ((max_frames > 0) && (frame_count >= max_frames))
-                    break;
             }
             last_frame_cycle_count = cpu.total_cycles;
         }
-//         if (cycles)
-//         {
-// //             struct timespec tlap = {0, 0};
-// //             clock_gettime(CLOCK_MONOTONIC, &tlap);
-// //             unsigned long lap_time = tlap.tv_sec * 1000000000 + tlap.tv_nsec;
-// //             unsigned long elapsed_time = lap_time - start_time;
-// //             start_time = lap_time;
-// //             printf("Time taken for %d cycles: %ld\n", cycles, elapsed_time);
-//         }
-//         else
-//             break;
-        if (show_screen)
+        if (cpu.total_cycles / 100000 != last_cycles)
         {
-            if (XEventsQueued(dsp, QueuedAfterFlush) > 0)
+            last_cycles = cpu.total_cycles / 100000;
+            printf("cycles %d\n", last_cycles * 100000);
+        }
+        if (ram[0x30b] != old_screen_number)
+        {
+            old_screen_number = ram[0x30b];
+            uint8_t current_screen = old_screen_number;
+            int x, y;
+            printf("screen %d", cpu.total_cycles);
+            for (y = 0; y < 192; y++)
             {
-                int exit_program = 0;
-                XNextEvent(dsp, &evt);
-
-                switch (evt.type) {
-
-                case (KeyRelease) :
-                    if (evt.xkey.keycode == keyQ)
-                        exit_program = 1;
-
-                case (ClientMessage) :
-                    if (evt.xclient.data.l[0] == wmDelete)
-                        exit_program = 1;
-                    break;
-
-                }
-                if (exit_program)
-                    break;
+                uint16_t line_offset = yoffset[y] | (current_screen == 1 ? 0x2000 : 0x4000);
+                for (x = 0; x < 40; x++)
+                    printf(" %d", ram[line_offset + x]);
             }
-            if (ram[0x30b] != old_screen_number)
-            {
-                old_screen_number = ram[0x30b];
-                render_hires_screen();
-            }
+            printf("\n");
+            fflush(stdout);
         }
     }
     fprintf(stderr, "Total cycles: %d\n", cpu.total_cycles);
-    fprintf(stderr, "Cycles per frame: %d\n", (uint64_t)((double)frame_cycle_count / frame_count));
-    printf("%12s %6s %8s %8s %4s %s\n", "Total CC", "% CC", "Calls", "CC/Call", "Addr", "Label");
-    for (uint32_t i = 0; i < 0x10000; i++)
+
+    if (watches)
     {
-        if (cycles_per_function[i] > 0)
-        {
-            printf("%12d %5.2f%% %8d %8d %04x",
-                   cycles_per_function[i],
-                   cycles_per_function[i] * 100.0 / cpu.total_cycles,
-                   calls_per_function[i],
-                   cycles_per_function[i] / calls_per_function[i],
-                   i);
-            if (label_for_address[i] >= 0)
-                printf(" %s", LABELS[label_for_address[i]]);
-            printf("\n");
-        }
+        free(watches);
+        watches = 0;
     }
-    if (watches_file)
-        fclose(watches_file);
+
     return 0;
 }
