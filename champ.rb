@@ -20,17 +20,21 @@ class Champ
             STDERR.puts 'Usage: ./champ.rb [options] <config.yaml>'
             STDERR.puts 'Options:'
             STDERR.puts '  --max-frames <n>'
+            STDERR.puts '  --no-animation'
             exit(1)
         end
         @files_dir = 'report-files'
         FileUtils.rm_rf(@files_dir)
         FileUtils.mkpath(@files_dir)
         @max_frames = nil
+        @record_frames = true
         args = ARGV.dup
         while args.size > 1
             item = args.shift
             if item == '--max-frames'
                 @max_frames = args.shift.to_i
+            elsif item == '--no-animation'
+                @record_frames = false
             else
                 STDERR.puts "Invalid argument: #{item}"
                 exit(1)
@@ -141,11 +145,16 @@ class Champ
                 stdin.puts watch_input
                 stdin.close
                 catch :sigint do
-                    gi, go, gt = Open3.popen2("./pgif 280 192 4 > #{File.join(@files_dir, 'frames.gif')}")
-                    gi.puts '000000'
-                    gi.puts 'ffffff'
-                    gi.puts '000000'
-                    gi.puts 'ffffff'
+                    gi = nil
+                    go = nil
+                    gt = nil
+                    if @record_frames
+                        gi, go, gt = Open3.popen2("./pgif 280 192 4 > #{File.join(@files_dir, 'frames.gif')}")
+                        gi.puts '000000'
+                        gi.puts 'ffffff'
+                        gi.puts '000000'
+                        gi.puts 'ffffff'
+                    end
                     stdout.each_line do |line|
 #                         puts "> #{line}"
                         parts = line.split(' ')
@@ -177,17 +186,19 @@ class Champ
                             print "\rFrames: #{@frame_count}, Cycles: #{cycle_count}"
                             this_frame_cycles = parts[1].to_i
                             frame_cycles << this_frame_cycles
-                            data = parts[2, parts.size - 2].map { |x| x.to_i }
-                            gi.puts 'l'
-                            (0...192).each do |y|
-                                (0...280).each do |x|
-                                    b = (data[y * 40 + (x / 7)] >> (x % 7)) & 1
-                                    gi.print b
+                            if @record_frames
+                                data = parts[2, parts.size - 2].map { |x| x.to_i }
+                                gi.puts 'l'
+                                (0...192).each do |y|
+                                    (0...280).each do |x|
+                                        b = (data[y * 40 + (x / 7)] >> (x % 7)) & 1
+                                        gi.print b
+                                    end
+                                    gi.puts
                                 end
-                                gi.puts
-                            end
 
-                            gi.puts "d #{(this_frame_cycles - last_frame_time) / 10000}"
+                                gi.puts "d #{(this_frame_cycles - last_frame_time) / 10000}"
+                            end
                             last_frame_time = this_frame_cycles
 
                             if @max_frames && @frame_count >= @max_frames
@@ -198,8 +209,10 @@ class Champ
                             print "\rFrames: #{@frame_count}, Cycles: #{cycle_count}"
                         end
                     end
-                    gi.close
-                    gt.join
+                    if @record_frames
+                        gi.close
+                        gt.join
+                    end
                 end
             end
             puts
@@ -223,7 +236,9 @@ class Champ
 
             # write frames
             io = StringIO.new
-            io.puts "<img class='screenshot' src='#{File.join(@files_dir, 'frames.gif')}' /><br />"
+            if @record_frames
+                io.puts "<img class='screenshot' src='#{File.join(@files_dir, 'frames.gif')}' /><br />"
+            end
             if @cycles_per_frame.size > 0
                 io.puts '<p>'
                 io.puts "Frames recorded: #{@frame_count}<br />"
