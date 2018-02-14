@@ -50,4 +50,4 @@ This will run the emulator and write the HTML report to `report.html`. If you do
 
 ## Did you know?
 
-By the way, there's a full-fledged, standalone, no-dependencies GIF encoder in `pgif.c` that writes animated GIFs and uses some optimizations to further minimize space.
+By the way, there's a full-fledged, incremental standalone, no-dependencies GIF encoder in `pgif.c` that writes animated GIFs and uses some optimizations to further minimize space. It's stream-friendly and as you feed pixels in via `stdin`, it dutifully writes GIF data to `stdout` until `stdin` gets closed.
