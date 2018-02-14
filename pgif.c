@@ -122,6 +122,8 @@ void encode_image(uint8_t* pixels, uint8_t* previous_pixels,
     uint8_t color_depth = 1;
     while (colors_used > (1 << color_depth))
         color_depth++;
+    if (color_depth < 2)
+        color_depth = 2;
 
     uint16_t cropped_left = 0;
     uint16_t cropped_top = 0;
@@ -240,8 +242,8 @@ void encode_image(uint8_t* pixels, uint8_t* previous_pixels,
     put_struct(&id, sizeof(id));
 
     uint8_t lzw_minimum_code_size = color_depth;
-    if (lzw_minimum_code_size < 2)
-        lzw_minimum_code_size = 2;
+//     if (lzw_minimum_code_size < 2)
+//         lzw_minimum_code_size = 2;
 
     put8(lzw_minimum_code_size);
 
@@ -343,6 +345,8 @@ int main(int argc, char** argv)
     uint8_t color_depth = 1;
     while (colors_used > (1 << color_depth))
         color_depth++;
+    if (color_depth < 2)
+        color_depth = 2;
 
     // write header
     struct header_block header;

@@ -149,9 +149,7 @@ class Champ
                     go = nil
                     gt = nil
                     if @record_frames
-                        gi, go, gt = Open3.popen2("./pgif 280 192 4 > #{File.join(@files_dir, 'frames.gif')}")
-                        gi.puts '000000'
-                        gi.puts 'ffffff'
+                        gi, go, gt = Open3.popen2("./pgif 280 192 2 > #{File.join(@files_dir, 'frames.gif')}")
                         gi.puts '000000'
                         gi.puts 'ffffff'
                     end
@@ -220,9 +218,6 @@ class Champ
             @cycles_per_frame = []
             (2...frame_cycles.size).each do |i|
                 @cycles_per_frame << frame_cycles[i] - frame_cycles[i - 1]
-            end
-            if @cycles_per_frame.size > 0
-                puts "Cycles per frame: #{@cycles_per_frame.inject(0) { |sum, x| sum + x } / @cycles_per_frame.size}"
             end
         end
     end
