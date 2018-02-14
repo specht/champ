@@ -4,7 +4,7 @@ This is a 65C02 emulator / profiler that enables you to really get to know your 
 
 ## Features
 
-* full 65C02 emulation at cycle accuracy
+* full, cycle-accurate 65C02 emulation
 * screen output as animated GIF with exact frame timing
 * average frame rate
 * see how much time is spent in which subroutine
