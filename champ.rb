@@ -248,39 +248,147 @@ class Champ
                 io.puts "<div style='display: inline-block;'>"
                 io.puts "<h3>#{watch[:components].map { |x| x[:name] }.join('/')} (#{File.basename(@source_path)}:#{watch[:line_number]})</h3>"
                 if @watch_values.include?(index)
-                    if watch[:components].size == 1
-                        io.puts '<em>TODO</em>'
-                    elsif watch[:components].size == 2
-                        histogram = {}
-                        @watch_values[index].each do |item|
-                            histogram[item.join('/')] ||= 0
-                            histogram[item.join('/')] += 1
+                    pixels = nil
+                    width = nil
+                    height = nil
+                    histogram = {}
+                    mask = [
+                        [0,0,1,1,1,0,0],
+                        [0,1,1,1,1,1,0],
+                        [1,1,1,1,1,1,1],
+                        [1,1,1,1,1,1,1],
+                        [1,1,1,1,1,1,1],
+                        [0,1,1,1,1,1,0],
+                        [0,0,1,1,1,0,0]
+                    ]
+                    @watch_values[index].each do |item|
+                        normalized_item = []
+                        item.each.with_index do |x, i|
+                            if watch[:components][i][:type] == 's8'
+                                x += 128
+                            elsif watch[:components][i][:type] == 'u16'
+                                x >>= 8
+                            elsif watch[:components][i][:type] == 's16'
+                                x = (x + 32768) >> 8
+                            end
+                            normalized_item << x
                         end
-                        histogram_max = histogram.values.max
-                        width = 256
-                        height = 256
-                        pixels = [63] * width * height
-                        histogram.each_pair do |key, value|
-                            key_parts = key.split('/').map { |x| x.to_i }
-                            (0..1).each do |i|
-                                if watch[:components][i][:type] == 's8'
-                                    key_parts[i] = key_parts[i] + 128
-                                elsif watch[:components][i][:type] == 'u16'
-                                    key_parts[i] = key_parts[i] >> 8
-                                elsif watch[:components][i][:type] == 's16'
-                                    key_parts[i] = (key_parts[i] + 32768) >> 8
+                        offset = normalized_item.inject(0) { |x, y| (x << 8) + y }
+                        histogram[offset] ||= 0
+                        histogram[offset] += 1
+                    end
+
+                    histogram_max = histogram.values.max
+                    width = 256
+                    height = (watch[:components].size == 1) ? 128 : 256
+                    pixels = [64] * width * height
+
+                    histogram.each_pair do |key, value|
+                        y = key & 0xff;
+                        x = height - 1 - ((key >> 8) & 0xff)
+                        ymin = y
+                        ymax = y
+                        if watch[:components].size == 1
+                            ymin = height - 1 - (value.to_f * (height - 1) / histogram_max).to_i
+                            ymax = height - 1
+                        end
+                        (ymin..ymax).each do |y|
+                            (0..6).each do |dy|
+                                py = y + dy - 3
+                                if py >= 0 && py < height
+                                    (0..6).each do |dx|
+                                        next if mask[dy][dx] == 0
+                                        px = x + dx - 3
+                                        if px >= 0 && px < width
+                                            if pixels[py * width + px] == 64
+                                                pixels[py * width + px] = 0
+                                            end
+                                        end
+                                    end
                                 end
                             end
-                            x = key_parts[0]
-                            y = 255 - key_parts[1]
                             pixels[y * width + x] = (((value.to_f / histogram_max) ** 0.5) * 63).to_i
                         end
+                    end
+#                     if watch[:components].size == 1
+#                         @watch_values[index].each do |item|
+#                             if watch[:components][0][:type] == 's8'
+#                                 item[0] += 128
+#                             elsif watch[:components][0][:type] == 'u16'
+#                                 item[0] >>= 8
+#                             elsif watch[:components][0][:type] == 's16'
+#                                 item[0] = (item[0] + 32768) >> 8
+#                             end
+#                             histogram[item] ||= 0
+#                             histogram[item] += 1
+#                         end
+#                         histogram_max = histogram.values.max
+#                         width = 256
+#                         height = 128
+#                         pixels = [64] * width * height
+#                         histogram.each_pair do |key, value|
+#                             key_parts = key
+#                             (0..(((value.to_f / histogram_max) * 127).to_i)).each do |y|
+#                                 x = key_parts[0]
+#                                 pixels[(127 - y) * width + x] = (((value.to_f / histogram_max) ** 0.5) * 63).to_i
+#                             end
+#                         end
+#                     elsif watch[:components].size == 2
+#                         @watch_values[index].each do |item|
+#                             normalized_item = []
+#                             item.each.with_index do |x, i|
+#                                 if watch[:components][i][:type] == 's8'
+#                                     x += 128
+#                                 elsif watch[:components][i][:type] == 'u16'
+#                                     x >>= 8
+#                                 elsif watch[:components][i][:type] == 's16'
+#                                     x = (x + 32768) >> 8
+#                                 end
+#                                 normalized_item << x
+#                             end
+#                             offset = (normalized_item[1] << 8) + normalized_item[0]
+#                             histogram[offset] ||= 0
+#                             histogram[offset] += 1
+#                         end
+#                         histogram_max = histogram.values.max
+#                         width = 256
+#                         height = 256
+#                         pixels = [64] * width * height
+#                         histogram.each_pair do |key, value|
+#                             x = key & 0xff;
+#                             y = 255 - ((key >> 8) & 0xff)
+#                             (0..6).each do |dy|
+#                                 py = y + dy - 3
+#                                 if py >= 0 && py < height
+#                                     (0..6).each do |dx|
+#                                         next if mask[dy][dx] == 0
+#                                         px = x + dx - 3
+#                                         if py >= 0 && py < height
+#                                             if pixels[py * width + px] == 64
+#                                                 pixels[py * width + px] = 0
+#                                             end
+#                                         end
+#                                     end
+#                                 end
+#                             end
+#                             pixels[y * width + x] = (((value.to_f / histogram_max) ** 0.5) * 63).to_i
+#                         end
+#                     end
 
-                        gi, go, gt = Open3.popen2("./pgif #{width} #{height} 64")
+                    if pixels
+                        gi, go, gt = Open3.popen2("./pgif #{width} #{height} 65")
                         (0...64).each do |i|
-                            g = ((i + 1) << 2) - 1
-                            gi.puts sprintf('%02x%02x%02x', g, g, g)
+                            l = (((63 - i) + 1) << 2) - 1
+                            # fce98d
+                            r = 0xfc
+                            g = 0xe9
+                            b = 0x8d
+                            gi.puts sprintf('%02x%02x%02x',
+                                            l * r / 255,
+                                            l * g / 255,
+                                            l * b / 255)
                         end
+                        gi.puts 'ffffff'
                         gi.puts 'f'
                         gi.puts pixels.map { |x| sprintf('%02x', x) }.join("\n")
                         gi.close
@@ -289,7 +397,6 @@ class Champ
                         File::open(watch_path, 'w') do |f|
                             f.write go.read
                         end
-
                         io.puts "<img src='#{watch_path}'></img>"
                     end
                 else
