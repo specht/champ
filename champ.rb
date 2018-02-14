@@ -273,7 +273,7 @@ class Champ
                             end
                             normalized_item << x
                         end
-                        offset = normalized_item.inject(0) { |x, y| (x << 8) + y }
+                        offset = normalized_item.reverse.inject(0) { |x, y| (x << 8) + y }
                         histogram[offset] ||= 0
                         histogram[offset] += 1
                     end
@@ -284,8 +284,8 @@ class Champ
                     pixels = [64] * width * height
 
                     histogram.each_pair do |key, value|
-                        y = key & 0xff;
-                        x = height - 1 - ((key >> 8) & 0xff)
+                        x = key & 0xff;
+                        y = height - 1 - ((key >> 8) & 0xff)
                         ymin = y
                         ymax = y
                         if watch[:components].size == 1
