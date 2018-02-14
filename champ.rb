@@ -42,8 +42,8 @@ class Champ
         end
         @config = YAML.load(File.read(args.shift))
         @source_files = []
-        @config['load'].each do |tuple|
-            @source_files << {:path => File.absolute_path(tuple[1]), :address => tuple[0]}
+        @config['load'].each_pair do |address, path|
+            @source_files << {:path => File.absolute_path(path), :address => address}
         end
 
         @keywords = Set.new(KEYWORDS.split(/\s/).map { |x| x.strip }.reject { |x| x.empty? })
