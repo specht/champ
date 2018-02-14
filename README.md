@@ -9,10 +9,7 @@ This is a 65C02 emulator / profiler that enables you to really get to know your 
 * average frame rate
 * see how much time is spent in which subroutine
 * watch variables (single variables or pairs)
-
-* no dependencies but Ruby, gcc and Merlin32
-
-![Champ Screenshot](doc/screenshot.png?raw=true "Fig. 1 Champ Screenshot")
+* no dependencies except Ruby, gcc and Merlin32
 
 ## Usage
 
@@ -39,6 +36,14 @@ We specified some source files (they'll get compiled automatically) and some obj
 
 Furthermore, we can disable subroutines by replacing the first opcode with a RTS. This is necessary in some cases because Champ does not emulate hardware and thus can not load data from disk, for example.
 
-## Miscellaneous
+To start champ, type:
+
+```
+$ ./champ.rb --max-frames 100 plot3d.yaml
+```
+
+This will run the emulator and write the HTML report to `report.html`. If you do not specify the maximum number of frames, you can still cancel the emulator by pressing Ctrl+C at any time. If you need fast results and don't need the animated GIF of all frames, specify the `--no-animation` flag, which will still give you all the information but without the animation.
+
+![Champ Screenshot](doc/screenshot.png?raw=true "Fig. 1 Champ Screenshot")
 
 By the way, there's a full-fledged, standalone, no-dependencies GIF encoder in `pgif.c` that writes animated GIFs and uses some optimizations to further minimize space.
