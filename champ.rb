@@ -324,6 +324,16 @@ class Champ
         puts ' done.'
     end
 
+    def parse_asm_int(s)
+        if s[0] == '#'
+            s[1, s.size - 1].to_i
+        elsif s[0] == '$'
+            s[1, s.size - 1].to_i(16)
+        else
+            s.to_i
+        end
+    end
+
     def parse_merlin_output(path)
         @source_line = -3
         File.open(path, 'r') do |f|
@@ -341,12 +351,6 @@ class Champ
                     next if code_parts.empty?
 
                     label = nil
-                    unless @keywords.include?(code_parts.first)
-                        label = code_parts.first
-                        code = code.sub(label, '').strip
-                        @label_for_pc[pc] = label
-                        @pc_for_label[label] = pc
-                    end
 
                     champ_directives = []
                     if code.include?(';')
@@ -355,6 +359,20 @@ class Champ
                             champ_directives << match.to_s
                         end
                     end
+                    if champ_directives.empty? && line_type == 'Equivalence'
+                        label = code_parts[0]
+                        pc = parse_asm_int(code_parts[2])
+                        @label_for_pc[pc] = label
+                        @pc_for_label[label] = pc
+                    else
+                        unless @keywords.include?(code_parts.first)
+                            label = code_parts.first
+                            code = code.sub(label, '').strip
+                            @label_for_pc[pc] = label
+                            @pc_for_label[label] = pc
+                        end
+                    end
+
                     next if champ_directives.empty?
 
                     if line_type == 'Equivalence'
