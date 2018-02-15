@@ -604,10 +604,10 @@ void handle_next_opcode()
             target_address = read16(rpc8());
             break;
         case zero_page_x:
-            target_address = (rpc8() + cpu.x) % 0xff;
+            target_address = (rpc8() + cpu.x) & 0xff;
             break;
         case zero_page_y:
-            target_address = (rpc8() + cpu.y) % 0xff;
+            target_address = (rpc8() + cpu.y) & 0xff;
             break;
         case absolute_x:
             target_address = rpc16();
