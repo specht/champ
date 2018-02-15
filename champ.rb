@@ -73,6 +73,10 @@ class Champ
         @config['load'].each_pair do |address, path|
             @source_files << {:path => File.absolute_path(path), :address => address}
         end
+        @highlight_color = '#fce98d'
+        if @config['highlight']
+            @highlight_color = @config['highlight']
+        end
 
         @keywords = Set.new(KEYWORDS.split(/\s/).map { |x| x.strip }.reject { |x| x.empty? })
         @global_variables = {}
@@ -427,20 +431,26 @@ class Champ
                                 end
                             end
                         end
-                        if component_index == 0
-                            print_s(pixels, width, height,
-                                    (canvas_left + canvas_width * 0.5 - component[:name].size * 3).to_i,
-                                    canvas_top + canvas_height + 18,
-                                    component[:name], 63)
-                        else
-                            print_s_r(pixels, width, height,
-                                        canvas_left - 22,
-                                        (canvas_top + canvas_height * 0.5 - component[:name].size * 3).to_i,
+                        (0..1).each do |offset|
+                            if component_index == 0
+                                print_s(pixels, width, height,
+                                        (canvas_left + canvas_width * 0.5 - component[:name].size * 3 + offset).to_i,
+                                        canvas_top + canvas_height + 18,
                                         component[:name], 63)
+                            else
+                                print_s_r(pixels, width, height,
+                                            canvas_left - 22,
+                                            (canvas_top + canvas_height * 0.5 - component[:name].size * 3 + offset).to_i,
+                                            component[:name], 63)
+                            end
                         end
                     end
                     label = "#{watch[:path]}:#{watch[:line_number]}"
                     print_s(pixels, width, height, width - 6 * label.size - 3, height - 10, label, 63)
+
+                    tr = @highlight_color[1, 2].to_i(16)
+                    tg = @highlight_color[3, 2].to_i(16)
+                    tb = @highlight_color[5, 2].to_i(16)
 
                     if pixels
                         gi, go, gt = Open3.popen2("./pgif #{width} #{height} 128")
@@ -452,10 +462,6 @@ class Champ
                                 b = 0xff
                             else
                                 l = (((63 - i) + 1) << 2) - 1
-                                # fce98d
-                                tr = 0xfc
-                                tg = 0xe9
-                                tb = 0x8d
                                 r = l * tr / 255
                                 g = l * tg / 255
                                 b = l * tb / 255

@@ -8,5 +8,6 @@ load:
     0x9500: plot3d/FONT
     0xb600: plot3d/projtab.s
 entry: ENTRY
+# highlight: '#c3def1'
 instant_rts:
     - LOAD1
