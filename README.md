@@ -32,7 +32,7 @@ instant_rts:
     - LOAD1
 ```
 
-We specified some source files (they'll get compiled automatically) and some object files along with their locations in memory (`load`). We also specified the entry point for our program (`entry`), this can be a label or an address.
+We specified some source files (which will get compiled automatically) and some object files along with their locations in memory (`load`). We also specified the entry point for our program (`entry`), this can be a label or an address.
 
 Furthermore, we can disable subroutines by replacing the first opcode with a RTS (`instant_rts`). This is necessary in some cases because Champ does not emulate hardware and thus can not load data from disk, for example.
 
