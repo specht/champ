@@ -707,7 +707,7 @@ __END__
     <h2>Cycles</h2>
     #{cycles}
 </div>
-<div style='margin-left: 440px; padding-top: 5px;'>
+<div style='margin-left: 460px; padding-top: 5px;'>
     <h2>Watches</h2>
     #{watches}
 </div>
