@@ -14,6 +14,34 @@ KEYWORDS = <<EOS
     SBC SEC SED SEI STA STX STY STZ TAX TAY TRB TSB TSX TXA TXS TYA
 EOS
 
+# font data borrowed from http://sunge.awardspace.com/glcd-sd/node4.html
+# Graphic LCD Font (Ascii Charaters 0x20-0x7F)
+# Author: Pascal Stang, Date: 10/19/2001
+FONT_DATA = <<EOS
+    00 00 00 00 00 00 00 5F 00 00 00 07 00 07 00 14 7F 14 7F 14 24 2A 7F 2A 12
+    23 13 08 64 62 36 49 55 22 50 00 05 03 00 00 00 1C 22 41 00 00 41 22 1C 00
+    08 2A 1C 2A 08 08 08 3E 08 08 00 50 30 00 00 08 08 08 08 08 00 60 60 00 00
+    20 10 08 04 02 3E 51 49 45 3E 00 42 7F 40 00 42 61 51 49 46 21 41 45 4B 31
+    18 14 12 7F 10 27 45 45 45 39 3C 4A 49 49 30 01 71 09 05 03 36 49 49 49 36
+    06 49 49 29 1E 00 36 36 00 00 00 56 36 00 00 00 08 14 22 41 14 14 14 14 14
+    41 22 14 08 00 02 01 51 09 06 32 49 79 41 3E 7E 11 11 11 7E 7F 49 49 49 36
+    3E 41 41 41 22 7F 41 41 22 1C 7F 49 49 49 41 7F 09 09 01 01 3E 41 41 51 32
+    7F 08 08 08 7F 00 41 7F 41 00 20 40 41 3F 01 7F 08 14 22 41 7F 40 40 40 40
+    7F 02 04 02 7F 7F 04 08 10 7F 3E 41 41 41 3E 7F 09 09 09 06 3E 41 51 21 5E
+    7F 09 19 29 46 46 49 49 49 31 01 01 7F 01 01 3F 40 40 40 3F 1F 20 40 20 1F
+    7F 20 18 20 7F 63 14 08 14 63 03 04 78 04 03 61 51 49 45 43 00 00 7F 41 41
+    02 04 08 10 20 41 41 7F 00 00 04 02 01 02 04 40 40 40 40 40 00 01 02 04 00
+    20 54 54 54 78 7F 48 44 44 38 38 44 44 44 20 38 44 44 48 7F 38 54 54 54 18
+    08 7E 09 01 02 08 14 54 54 3C 7F 08 04 04 78 00 44 7D 40 00 20 40 44 3D 00
+    00 7F 10 28 44 00 41 7F 40 00 7C 04 18 04 78 7C 08 04 04 78 38 44 44 44 38
+    7C 14 14 14 08 08 14 14 18 7C 7C 08 04 04 08 48 54 54 54 20 04 3F 44 40 20
+    3C 40 40 20 7C 1C 20 40 20 1C 3C 40 30 40 3C 44 28 10 28 44 0C 50 50 50 3C
+    44 64 54 4C 44 00 08 36 41 00 00 00 7F 00 00 00 41 36 08 00 08 08 2A 1C 08
+    08 1C 2A 08 08
+EOS
+
+FONT = FONT_DATA.split(/\s+/).map { |x| x.strip }.reject { |x| x.empty? }.map { |x| x.to_i(16) }
+
 class Champ
     def initialize
         if ARGV.empty?
@@ -222,12 +250,49 @@ class Champ
         end
     end
 
+    def print_c(pixels, width, height, x, y, c, color)
+        if c.ord >= 0x20 && c.ord < 0x80
+            font_index = (c.ord - 0x20) * 5
+            (0...5).each do |px|
+                (0...7).each do |py|
+                    if ((FONT[font_index + px] >> py) & 1) == 1
+                        pixels[(y + py) * width + (x + px)] = color
+                    end
+                end
+            end
+        end
+    end
+
+    def print_c_r(pixels, width, height, x, y, c, color)
+        if c.ord >= 0x20 && c.ord < 0x80
+            font_index = (c.ord - 0x20) * 5
+            (0...5).each do |px|
+                (0...7).each do |py|
+                    if ((FONT[font_index + px] >> (6 - py)) & 1) == 1
+                        pixels[(y + px) * width + (x + py)] = color
+                    end
+                end
+            end
+        end
+    end
+
+    def print_s(pixels, width, height, x, y, s, color)
+        s.each_char.with_index do |c, i|
+            print_c(pixels, width, height, x + i * 6, y, c, color)
+        end
+    end
+
+    def print_s_r(pixels, width, height, x, y, s, color)
+        s.each_char.with_index do |c, i|
+            print_c_r(pixels, width, height, x, y + i * 6, c, color)
+        end
+    end
+
     def write_report
         html_name = 'report.html'
         print "Writing report to file://#{File.absolute_path(html_name)} ..."
         File::open(html_name, 'w') do |f|
             report = DATA.read
-            report.sub!('#{source_name}', File.basename(@source_path))
 
             # write frames
             io = StringIO.new
@@ -246,7 +311,6 @@ class Champ
             io = StringIO.new
             @watches_for_index.each.with_index do |watch, index|
                 io.puts "<div style='display: inline-block;'>"
-                io.puts "<h3>#{watch[:components].map { |x| x[:name] }.join('/')} (#{File.basename(@source_path)}:#{watch[:line_number]})</h3>"
                 if @watch_values.include?(index)
                     pixels = nil
                     width = nil
@@ -279,18 +343,24 @@ class Champ
                     end
 
                     histogram_max = histogram.values.max
-                    width = 256
-                    height = (watch[:components].size == 1) ? 128 : 256
-                    pixels = [64] * width * height
+                    width = 276
+                    height = (watch[:components].size == 1) ? 148 : 276
+                    canvas_top = 20
+                    canvas_left = 40
+                    canvas_width = width - 60
+                    canvas_height = height - 60
+                    pixels = [0] * width * height
 
                     histogram.each_pair do |key, value|
                         x = key & 0xff;
-                        y = height - 1 - ((key >> 8) & 0xff)
+                        y = (((key ^ 0xff) >> 8) & 0xff)
+                        x = (x * canvas_width) / 255 + canvas_left
+                        y = (y * canvas_height) / 255 + canvas_top
                         ymin = y
                         ymax = y
                         if watch[:components].size == 1
-                            ymin = height - 1 - (value.to_f * (height - 1) / histogram_max).to_i
-                            ymax = height - 1
+                            ymin = canvas_top + canvas_height - 1 - (value.to_f * (canvas_height - 1) / histogram_max).to_i
+                            ymax = canvas_top + canvas_height - 1
                         end
                         (ymin..ymax).each do |y|
                             (0..6).each do |dy|
@@ -300,8 +370,8 @@ class Champ
                                         next if mask[dy][dx] == 0
                                         px = x + dx - 3
                                         if px >= 0 && px < width
-                                            if pixels[py * width + px] == 64
-                                                pixels[py * width + px] = 0
+                                            if pixels[py * width + px] == 0
+                                                pixels[py * width + px] = 1
                                             end
                                         end
                                     end
@@ -310,85 +380,93 @@ class Champ
                             pixels[y * width + x] = (((value.to_f / histogram_max) ** 0.5) * 63).to_i
                         end
                     end
-#                     if watch[:components].size == 1
-#                         @watch_values[index].each do |item|
-#                             if watch[:components][0][:type] == 's8'
-#                                 item[0] += 128
-#                             elsif watch[:components][0][:type] == 'u16'
-#                                 item[0] >>= 8
-#                             elsif watch[:components][0][:type] == 's16'
-#                                 item[0] = (item[0] + 32768) >> 8
-#                             end
-#                             histogram[item] ||= 0
-#                             histogram[item] += 1
-#                         end
-#                         histogram_max = histogram.values.max
-#                         width = 256
-#                         height = 128
-#                         pixels = [64] * width * height
-#                         histogram.each_pair do |key, value|
-#                             key_parts = key
-#                             (0..(((value.to_f / histogram_max) * 127).to_i)).each do |y|
-#                                 x = key_parts[0]
-#                                 pixels[(127 - y) * width + x] = (((value.to_f / histogram_max) ** 0.5) * 63).to_i
-#                             end
-#                         end
-#                     elsif watch[:components].size == 2
-#                         @watch_values[index].each do |item|
-#                             normalized_item = []
-#                             item.each.with_index do |x, i|
-#                                 if watch[:components][i][:type] == 's8'
-#                                     x += 128
-#                                 elsif watch[:components][i][:type] == 'u16'
-#                                     x >>= 8
-#                                 elsif watch[:components][i][:type] == 's16'
-#                                     x = (x + 32768) >> 8
-#                                 end
-#                                 normalized_item << x
-#                             end
-#                             offset = (normalized_item[1] << 8) + normalized_item[0]
-#                             histogram[offset] ||= 0
-#                             histogram[offset] += 1
-#                         end
-#                         histogram_max = histogram.values.max
-#                         width = 256
-#                         height = 256
-#                         pixels = [64] * width * height
-#                         histogram.each_pair do |key, value|
-#                             x = key & 0xff;
-#                             y = 255 - ((key >> 8) & 0xff)
-#                             (0..6).each do |dy|
-#                                 py = y + dy - 3
-#                                 if py >= 0 && py < height
-#                                     (0..6).each do |dx|
-#                                         next if mask[dy][dx] == 0
-#                                         px = x + dx - 3
-#                                         if py >= 0 && py < height
-#                                             if pixels[py * width + px] == 64
-#                                                 pixels[py * width + px] = 0
-#                                             end
-#                                         end
-#                                     end
-#                                 end
-#                             end
-#                             pixels[y * width + x] = (((value.to_f / histogram_max) ** 0.5) * 63).to_i
-#                         end
-#                     end
+
+                    watch[:components].each.with_index do |component, component_index|
+                        labels = []
+                        if component[:type] == 'u8'
+                            labels << [0.0, '0']
+                            labels << [64.0/255, '64']
+                            labels << [128.0/255, '128']
+                            labels << [192.0/255, '192']
+                            labels << [1.0, '255']
+                        elsif component[:type] == 's8'
+                            labels << [0.0, '-128']
+                            labels << [64.0/255, '-64']
+                            labels << [128.0/255, '0']
+                            labels << [192.0/255, '64']
+                            labels << [1.0, '127']
+                        elsif component[:type] == 'u16'
+                            labels << [0.0, '0']
+                            labels << [64.0/255, '16k']
+                            labels << [128.0/255, '32k']
+                            labels << [192.0/255, '48k']
+                            labels << [1.0, '64k']
+                        elsif component[:type] == 's16'
+                            labels << [0.0, '-32k']
+                            labels << [64.0/255, '-16k']
+                            labels << [128.0/255, '0']
+                            labels << [192.0/255, '16k']
+                            labels << [1.0, '32k']
+                        end
+                        labels.each do |label|
+                            s = label[1]
+                            if component_index == 0
+                                x = (label[0] * canvas_width).to_i + canvas_left
+                                print_s(pixels, width, height,
+                                        (x - s.size * (6 * label[0])).to_i,
+                                        canvas_top + canvas_height + 7, s, 63)
+                                (0..(canvas_height + 3)).each do |y|
+                                    pixels[(y + canvas_top) * width + x] |= 0x40
+                                end
+                            else
+                                y = ((1.0 - label[0]) * canvas_height).to_i + canvas_top
+                                print_s_r(pixels, width, height, canvas_left - 12,
+                                            (y - s.size * (6 * (1.0 - label[0]))).to_i, s, 63)
+                                (-3..canvas_width).each do |x|
+                                    pixels[y * width + (x + canvas_left)] |= 0x40
+                                end
+                            end
+                        end
+                        if component_index == 0
+                            print_s(pixels, width, height,
+                                    (canvas_left + canvas_width * 0.5 - component[:name].size * 3).to_i,
+                                    canvas_top + canvas_height + 18,
+                                    component[:name], 63)
+                        else
+                            print_s_r(pixels, width, height,
+                                        canvas_left - 22,
+                                        (canvas_top + canvas_height * 0.5 - component[:name].size * 3).to_i,
+                                        component[:name], 63)
+                        end
+                    end
+                    label = "#{watch[:path]}:#{watch[:line_number]}"
+                    print_s(pixels, width, height, width - 6 * label.size - 3, height - 10, label, 63)
 
                     if pixels
-                        gi, go, gt = Open3.popen2("./pgif #{width} #{height} 65")
+                        gi, go, gt = Open3.popen2("./pgif #{width} #{height} 128")
+                        palette = [''] * 128
                         (0...64).each do |i|
-                            l = (((63 - i) + 1) << 2) - 1
-                            # fce98d
-                            r = 0xfc
-                            g = 0xe9
-                            b = 0x8d
-                            gi.puts sprintf('%02x%02x%02x',
-                                            l * r / 255,
-                                            l * g / 255,
-                                            l * b / 255)
+                            if (i == 0)
+                                r = 0xff
+                                g = 0xff
+                                b = 0xff
+                            else
+                                l = (((63 - i) + 1) << 2) - 1
+                                # fce98d
+                                tr = 0xfc
+                                tg = 0xe9
+                                tb = 0x8d
+                                r = l * tr / 255
+                                g = l * tg / 255
+                                b = l * tb / 255
+                            end
+                            palette[i] = sprintf('%02x%02x%02x', r, g, b)
+                            r = r * 4 / 5
+                            g = g * 4 / 5
+                            b = b * 4 / 5
+                            palette[i + 64] = sprintf('%02x%02x%02x', r, g, b)
                         end
-                        gi.puts 'ffffff'
+                        gi.puts palette.join("\n")
                         gi.puts 'f'
                         gi.puts pixels.map { |x| sprintf('%02x', x) }.join("\n")
                         gi.close
@@ -530,6 +608,7 @@ class Champ
         # Au Au(post) As Xs(post) RX u8 Au,Xu,Yu
         result = {}
         s = s[1, s.size - 1] if s[0] == '@'
+        result[:path] = File.basename(@source_path)
         if global_variable
             if ['u8', 's8', 'u16', 's16'].include?(s)
                 result[:type] = s
@@ -601,7 +680,6 @@ __END__
     </style>
 </head>
 <body>
-<h1>champ report for #{source_name}</h1>
 <div style='float: left; border-right: 1px solid #aaa;'>
     <h2>Frames</h2>
     #{screenshots}
