@@ -1003,10 +1003,10 @@ void handle_watch(uint16_t pc, uint8_t post)
             }
         }
         if (old_index == -1)
-            printf("watch 0x%04x %d", watch_in_subroutine, watch->index);
+            printf("watch 0x%04x %d %d", watch_in_subroutine, watch->index, cpu.total_cycles);
         else
             if (old_index != watch->index)
-                printf("\nwatch 0x%04x %d", watch_in_subroutine, watch->index);
+                printf("\nwatch 0x%04x %d %d", watch_in_subroutine, watch->index, cpu.total_cycles);
 
         old_index = watch->index;
         int32_t value = 0;

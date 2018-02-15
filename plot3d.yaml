@@ -1,5 +1,5 @@
 load:
-    0x6000: plot3d/plot3d242.s
+    0x6000: plot3d/plot3d242c.s
     0x1200: plot3d/multtab.s
     0x8400: plot3d/ldrwtab.s
     0x8900: plot3d/SINETABLE

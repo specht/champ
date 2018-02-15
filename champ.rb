@@ -172,6 +172,7 @@ class Champ
             frame_cycles = []
             @cycles_per_function = {}
             @calls_per_function = {}
+            @max_cycle_count = 0
             call_stack = []
             last_call_stack_cycles = 0
             Open3.popen2("./p65c02 #{@record_frames ? '' : '--no-screen'} --hide-log --start-pc #{start_pc} #{File.join(temp_dir, 'disk_image')}") do |stdin, stdout, thread|
@@ -193,6 +194,7 @@ class Champ
                         if parts.first == 'jsr'
                             pc = parts[1].to_i(16)
                             cycles = parts[2].to_i
+                            @max_cycle_count = cycles
                             @calls_per_function[pc] ||= 0
                             @calls_per_function[pc] += 1
                             unless call_stack.empty?
@@ -203,6 +205,7 @@ class Champ
                             call_stack << pc
                         elsif parts.first == 'rts'
                             cycles = parts[1].to_i
+                            @max_cycle_count = cycles
                             unless call_stack.empty?
                                 @cycles_per_function[call_stack.last] ||= 0
                                 @cycles_per_function[call_stack.last] += cycles - last_call_stack_cycles
@@ -211,14 +214,18 @@ class Champ
                             call_stack.pop
                         elsif parts.first == 'watch'
                             watch_index = parts[2].to_i
+                            cycles = parts[3].to_i
+                            @max_cycle_count = cycles
                             @watch_called_from_subroutine[watch_index] ||= Set.new()
                             @watch_called_from_subroutine[watch_index] << parts[1].to_i(16)
                             @watch_values[watch_index] ||= []
-                            @watch_values[watch_index] << parts[3, parts.size - 3].map { |x| x.to_i }
+                            watch_value_tuple = parts[4, parts.size - 4].map { |x| x.to_i }
+                            @watch_values[watch_index] << {:tuple => watch_value_tuple, :cycles => cycles}
                         elsif parts.first == 'screen'
                             @frame_count += 1
                             print "\rFrames: #{@frame_count}, Cycles: #{cycle_count}"
                             this_frame_cycles = parts[1].to_i
+                            @max_cycle_count = this_frame_cycles
                             frame_cycles << this_frame_cycles
                             if @record_frames
                                 data = parts[2, parts.size - 2].map { |x| x.to_i }
@@ -240,6 +247,7 @@ class Champ
                             end
                         elsif parts.first == 'cycles'
                             cycle_count = parts[1].to_i
+                            @max_cycle_count = cycle_count
                             print "\rFrames: #{@frame_count}, Cycles: #{cycle_count}"
                         end
                     end
@@ -335,7 +343,10 @@ class Champ
                     ]
                     @watch_values[index].each do |item|
                         normalized_item = []
-                        item.each.with_index do |x, i|
+                        if item[:tuple].size == 1
+                            normalized_item << (item[:cycles] * 255 / @max_cycle_count).to_i
+                        end
+                        item[:tuple].each.with_index do |x, i|
                             if watch[:components][i][:type] == 's8'
                                 x += 128
                             elsif watch[:components][i][:type] == 'u16'
@@ -352,7 +363,7 @@ class Champ
 
                     histogram_max = histogram.values.max
                     width = 276
-                    height = (watch[:components].size == 1) ? 158 : 286
+                    height = (watch[:components].size == 1) ? 286 : 286
                     canvas_top = 20
                     canvas_left = 40
                     canvas_width = width - 60
@@ -364,23 +375,15 @@ class Champ
                         y = (((key ^ 0xff) >> 8) & 0xff)
                         x = (x * canvas_width) / 255 + canvas_left
                         y = (y * canvas_height) / 255 + canvas_top
-                        ymin = y
-                        ymax = y
-                        if watch[:components].size == 1
-                            ymin = canvas_top + canvas_height - 1 - (value.to_f * (canvas_height - 1) / histogram_max).to_i
-                            ymax = canvas_top + canvas_height - 1
-                        end
-                        (ymin..ymax).each do |y|
-                            (0..6).each do |dy|
-                                py = y + dy - 3
-                                if py >= 0 && py < height
-                                    (0..6).each do |dx|
-                                        next if mask[dy][dx] == 0
-                                        px = x + dx - 3
-                                        if px >= 0 && px < width
-                                            if pixels[py * width + px] == 0
-                                                pixels[py * width + px] = 1
-                                            end
+                        (0..6).each do |dy|
+                            py = y + dy - 3
+                            if py >= 0 && py < height
+                                (0..6).each do |dx|
+                                    next if mask[dy][dx] == 0
+                                    px = x + dx - 3
+                                    if px >= 0 && px < width
+                                        if pixels[py * width + px] == 0
+                                            pixels[py * width + px] = 1
                                         end
                                     end
                                 end
@@ -418,7 +421,7 @@ class Champ
                         end
                         labels.each do |label|
                             s = label[1]
-                            if component_index == 0
+                            if component_index == 0 && watch[:components].size == 2
                                 x = (label[0] * canvas_width).to_i + canvas_left
                                 print_s(pixels, width, height,
                                         (x - s.size * (6 * label[0])).to_i,
@@ -437,7 +440,7 @@ class Champ
                         end
                         (0..1).each do |offset|
                             component_label = component[:name]
-                            if component_index == 0
+                            if component_index == 0 && watch[:components].size == 2
                                 print_s(pixels, width, height,
                                         (canvas_left + canvas_width * 0.5 - component_label.size * 3 + offset).to_i,
                                         canvas_top + canvas_height + 18,
