@@ -17,6 +17,7 @@
 #define NEGATIVE            0x80
 
 uint8_t show_log = 1;
+uint8_t show_screen = 1;
 uint8_t show_call_stack = 0;
 
 uint8_t trace_stack[0x100];
@@ -992,13 +993,20 @@ void handle_watch(uint16_t pc, uint8_t post)
     while (watches[offset].pc == pc && watches[offset].post == post)
     {
         r_watch* watch = &watches[offset];
-        if (old_index == -1)
+        uint16_t watch_in_subroutine = 0;
+        for (int i = trace_stack_pointer + 1; i <= 0xff; i++)
         {
-            printf("watch %d", watch->index);
+            if (trace_stack[i] == cpu.sp + 2)
+            {
+                watch_in_subroutine = trace_stack_function[i];
+                break;
+            }
         }
+        if (old_index == -1)
+            printf("watch 0x%04x %d", watch_in_subroutine, watch->index);
         else
             if (old_index != watch->index)
-                printf("\nwatch %d", watch->index);
+                printf("\nwatch 0x%04x %d", watch_in_subroutine, watch->index);
 
         old_index = watch->index;
         int32_t value = 0;
@@ -1060,6 +1068,7 @@ int main(int argc, char** argv)
         printf("  --start-pc <address or label>\n");
         printf("  --frame-start <address or label>\n");
         printf("  --max-frames <n>\n");
+        printf("  --no-screen\n");
         exit(1);
     }
 
@@ -1134,6 +1143,8 @@ int main(int argc, char** argv)
     {
         if (strcmp(argv[i], "--hide-log") == 0)
             show_log = 0;
+        else if (strcmp(argv[i], "--no-screen") == 0)
+            show_screen = 0;
         else if (strcmp(argv[i], "--start-pc") == 0)
         {
             char *temp = argv[++i];
@@ -1193,11 +1204,14 @@ int main(int argc, char** argv)
             uint8_t current_screen = old_screen_number;
             int x, y;
             printf("screen %d", cpu.total_cycles);
-            for (y = 0; y < 192; y++)
+            if (show_screen)
             {
-                uint16_t line_offset = yoffset[y] | (current_screen == 1 ? 0x2000 : 0x4000);
-                for (x = 0; x < 40; x++)
-                    printf(" %d", ram[line_offset + x]);
+                for (y = 0; y < 192; y++)
+                {
+                    uint16_t line_offset = yoffset[y] | (current_screen == 1 ? 0x2000 : 0x4000);
+                    for (x = 0; x < 40; x++)
+                        printf(" %d", ram[line_offset + x]);
+                }
             }
             printf("\n");
             fflush(stdout);

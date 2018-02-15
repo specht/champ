@@ -156,9 +156,11 @@ class Champ
                     watch_index += 1
                 end
             end
+
             watch_input = io.string
 
             @watch_values = {}
+            @watch_called_from_subroutine = {}
             start_pc = @pc_for_label[@config['entry']] || @config['entry']
             Signal.trap('INT') do
                 puts 'Killing 65C02 profiler...'
@@ -172,7 +174,7 @@ class Champ
             @calls_per_function = {}
             call_stack = []
             last_call_stack_cycles = 0
-            Open3.popen2("./p65c02 --hide-log --start-pc #{start_pc} #{File.join(temp_dir, 'disk_image')}") do |stdin, stdout, thread|
+            Open3.popen2("./p65c02 #{@record_frames ? '' : '--no-screen'} --hide-log --start-pc #{start_pc} #{File.join(temp_dir, 'disk_image')}") do |stdin, stdout, thread|
                 stdin.puts watch_input.split("\n").size
                 stdin.puts watch_input
                 stdin.close
@@ -208,9 +210,11 @@ class Champ
                             last_call_stack_cycles = cycles
                             call_stack.pop
                         elsif parts.first == 'watch'
-                            watch_index = parts[1].to_i
+                            watch_index = parts[2].to_i
+                            @watch_called_from_subroutine[watch_index] ||= Set.new()
+                            @watch_called_from_subroutine[watch_index] << parts[1].to_i(16)
                             @watch_values[watch_index] ||= []
-                            @watch_values[watch_index] << parts[2, parts.size - 2].map { |x| x.to_i }
+                            @watch_values[watch_index] << parts[3, parts.size - 3].map { |x| x.to_i }
                         elsif parts.first == 'screen'
                             @frame_count += 1
                             print "\rFrames: #{@frame_count}, Cycles: #{cycle_count}"
@@ -348,11 +352,11 @@ class Champ
 
                     histogram_max = histogram.values.max
                     width = 276
-                    height = (watch[:components].size == 1) ? 148 : 276
+                    height = (watch[:components].size == 1) ? 158 : 286
                     canvas_top = 20
                     canvas_left = 40
                     canvas_width = width - 60
-                    canvas_height = height - 60
+                    canvas_height = height - 70
                     pixels = [0] * width * height
 
                     histogram.each_pair do |key, value|
@@ -447,6 +451,11 @@ class Champ
                         end
                     end
                     label = "#{sprintf('0x%04x', watch[:pc])} / #{watch[:path]}:#{watch[:line_number]} (#{watch[:post] ? 'post' : 'pre'})"
+                    print_s(pixels, width, height, width / 2 - 3 * label.size, height - 20, label, 63)
+                    label = @watch_called_from_subroutine[index].map do |x|
+                        "#{@label_for_pc[x] || sprintf('0x%04x', x)}+#{watch[:pc] - x}"
+                    end.join(', ')
+                    label = "at #{label}"
                     print_s(pixels, width, height, width / 2 - 3 * label.size, height - 10, label, 63)
 
                     tr = @highlight_color[1, 2].to_i(16)
