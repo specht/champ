@@ -96,12 +96,12 @@ class Champ
                 STDERR.puts 'Input file not found.'
                 exit(1)
             end
-            Dir::mktmpdir do |temp_dir|
-                FileUtils.cp(@source_path, temp_dir)
+            if @source_path[-2, 2] == '.s'
+                Dir::mktmpdir do |temp_dir|
+                    FileUtils.cp(@source_path, temp_dir)
 
-                pwd = Dir.pwd
-                Dir.chdir(temp_dir)
-                if @source_path[-2, 2] == '.s'
+                    pwd = Dir.pwd
+                    Dir.chdir(temp_dir)
                     # compile the source
                     merlin_output = `Merlin32 -V . #{File.basename(@source_path)}`
                     if $?.exitstatus != 0 || File.exist?('error_output.txt')
@@ -116,10 +116,10 @@ class Champ
                     # TODO: Adjust addresses!!!
                     parse_merlin_output(@merlin_output_path)
                     load_image(@merlin_binary_path, source_file[:address])
-                else
-                    load_image(@source_path, source_file[:address])
+                    Dir.chdir(pwd)
                 end
-                Dir.chdir(pwd)
+            else
+                load_image(@source_path, source_file[:address])
             end
         end
     end
@@ -432,21 +432,22 @@ class Champ
                             end
                         end
                         (0..1).each do |offset|
+                            component_label = component[:name]
                             if component_index == 0
                                 print_s(pixels, width, height,
-                                        (canvas_left + canvas_width * 0.5 - component[:name].size * 3 + offset).to_i,
+                                        (canvas_left + canvas_width * 0.5 - component_label.size * 3 + offset).to_i,
                                         canvas_top + canvas_height + 18,
-                                        component[:name], 63)
+                                        component_label, 63)
                             else
                                 print_s_r(pixels, width, height,
                                             canvas_left - 22,
-                                            (canvas_top + canvas_height * 0.5 - component[:name].size * 3 + offset).to_i,
-                                            component[:name], 63)
+                                            (canvas_top + canvas_height * 0.5 - component_label.size * 3 + offset).to_i,
+                                            component_label, 63)
                             end
                         end
                     end
-                    label = "#{watch[:path]}:#{watch[:line_number]}"
-                    print_s(pixels, width, height, width - 6 * label.size - 3, height - 10, label, 63)
+                    label = "#{sprintf('0x%04x', watch[:pc])} / #{watch[:path]}:#{watch[:line_number]} (#{watch[:post] ? 'post' : 'pre'})"
+                    print_s(pixels, width, height, width / 2 - 3 * label.size, height - 10, label, 63)
 
                     tr = @highlight_color[1, 2].to_i(16)
                     tg = @highlight_color[3, 2].to_i(16)
@@ -588,8 +589,10 @@ class Champ
                     elsif line_type == 'Code'
                         @watches[pc] ||= []
                         champ_directives.each do |directive|
+                            line_number = parts[1].split(' ').map { |x| x.strip }.reject { |x| x.empty? }.last.to_i
                             watch = parse_champ_directive(directive, false)
-                            watch[:line_number] = @source_line
+                            watch[:line_number] = line_number
+                            watch[:pc] = pc
                             @watches[pc] << watch
                         end
                     end
