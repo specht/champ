@@ -1,6 +1,6 @@
 # Champ - N. Harold Cham's 65C02 Profiler
 
-This is a 65C02 emulator / profiler that enables you to really get to know your APPLE ][ HiRes Graphics Mode Demo.
+This is a 6502/65C02 emulator / profiler that enables you to really get to know your APPLE ][ HiRes Graphics Mode Demo.
 
 ## Features
 
