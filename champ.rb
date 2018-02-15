@@ -372,7 +372,7 @@ class Champ
 
                     histogram.each_pair do |key, value|
                         x = key & 0xff;
-                        y = (((key ^ 0xff) >> 8) & 0xff)
+                        y = ((key >> 8) & 0xff) ^ 0xff
                         x = (x * canvas_width) / 255 + canvas_left
                         y = (y * canvas_height) / 255 + canvas_top
                         (0..6).each do |dy|
