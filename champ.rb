@@ -614,7 +614,7 @@ class Champ
                 io = StringIO.new
                 io.puts "digraph {"
                 io.puts "overlap = false;"
-                io.puts "rankdir = TB;"
+                io.puts "rankdir = LR;"
                 io.puts "splines = true;"
                 io.puts "graph [fontname = Helvetica, fontsize = 9, size = \"14, 11\", nodesep = 0.2, ranksep = 0.3, ordering = out];"
                 io.puts "node [fontname = Helvetica, fontsize = 9, shape = rect, style = filled, fillcolor = \"#fce94f\" color = \"#c4a000\"];"
@@ -815,17 +815,19 @@ __END__
     </style>
 </head>
 <body>
-<div style='float: left; border-right: 1px solid #aaa;'>
+<div style='float: left; padding-right: 10px;'>
     <h2>Frames</h2>
     #{screenshots}
     <h2>Cycles</h2>
     #{cycles}
 </div>
-<div style='margin-left: 460px; padding-top: 5px;'>
-    <h2>Watches</h2>
-    #{watches}
+<div style='float: left; padding-right: 10px;'>
     <h2>Call Graph</h2>
     #{call_graph}
+</div>
+<div style='padding-top: 0.1px;'>
+    <h2>Watches</h2>
+    #{watches}
 </div>
 </body>
 </html>
