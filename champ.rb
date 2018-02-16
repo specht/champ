@@ -57,6 +57,7 @@ class Champ
         FileUtils.mkpath(@files_dir)
         @max_frames = nil
         @record_frames = true
+        @cycles_per_function = {}
         args = ARGV.dup
         while args.size > 1
             item = args.shift
@@ -153,14 +154,16 @@ class Champ
             @watches.keys.sort.each do |pc|
                 @watches[pc].each do |watch0|
                     watch0[:components].each do |watch|
-                        which = watch.include?(:register) ?
-                            sprintf('reg,%s', watch[:register]) :
-                            sprintf('mem,0x%04x', watch[:address])
-                        io.puts sprintf('%d,0x%04x,%d,%s,%s',
-                                        watch_index, pc,
-                                        watch0[:post] ? 1 : 0,
-                                        watch[:type],
-                                        which)
+                        if watch.include?(:register) || watch.include?(:address)
+                            which = watch.include?(:register) ?
+                                sprintf('reg,%s', watch[:register]) :
+                                sprintf('mem,0x%04x', watch[:address])
+                            io.puts sprintf('%d,0x%04x,%d,%s,%s',
+                                            watch_index, pc,
+                                            watch0[:post] ? 1 : 0,
+                                            watch[:type],
+                                            which)
+                        end
                     end
                     @watches_for_index << watch0
                     watch_index += 1
@@ -180,7 +183,7 @@ class Champ
             cycle_count = 0
             last_frame_time = 0
             frame_cycles = []
-            @cycles_per_function = {}
+            @total_cycles_per_function = {}
             @calls_per_function = {}
             @call_graph_counts = {}
             @max_cycle_count = 0
@@ -211,8 +214,8 @@ class Champ
                             calling_function = start_pc
                             unless call_stack.empty?
                                 calling_function = call_stack.last
-                                @cycles_per_function[call_stack.last] ||= 0
-                                @cycles_per_function[call_stack.last] += cycles - last_call_stack_cycles
+                                @total_cycles_per_function[call_stack.last] ||= 0
+                                @total_cycles_per_function[call_stack.last] += cycles - last_call_stack_cycles
                             end
                             @call_graph_counts[calling_function] ||= {}
                             @call_graph_counts[calling_function][pc] ||= 0
@@ -222,9 +225,16 @@ class Champ
                         elsif parts.first == 'rts'
                             cycles = parts[1].to_i
                             @max_cycle_count = cycles
+                            last_cycles = @total_cycles_per_function[call_stack.last] || 0
                             unless call_stack.empty?
-                                @cycles_per_function[call_stack.last] ||= 0
-                                @cycles_per_function[call_stack.last] += cycles - last_call_stack_cycles
+                                @total_cycles_per_function[call_stack.last] ||= 0
+                                @total_cycles_per_function[call_stack.last] += cycles - last_call_stack_cycles
+                            end
+                            if @cycles_per_function.include?(call_stack.last)
+                                @cycles_per_function[call_stack.last] << {
+                                    :call_cycles => @total_cycles_per_function[call_stack.last] - last_cycles,
+                                    :at_cycles => cycles
+                                }
                             end
                             last_call_stack_cycles = cycles
                             call_stack.pop
@@ -274,7 +284,7 @@ class Champ
                 end
             end
             puts
-
+            
             @cycles_per_frame = []
             (2...frame_cycles.size).each do |i|
                 @cycles_per_frame << frame_cycles[i] - frame_cycles[i - 1]
@@ -343,7 +353,7 @@ class Champ
             io = StringIO.new
             @watches_for_index.each.with_index do |watch, index|
                 io.puts "<div style='display: inline-block;'>"
-                if @watch_values.include?(index)
+                if @watch_values.include?(index) || @cycles_per_function.include?(watch[:pc])
                     pixels = nil
                     width = nil
                     height = nil
@@ -359,28 +369,46 @@ class Champ
                         [0,1,1,1,1,1,0],
                         [0,0,1,1,1,0,0]
                     ]
-                    @watch_values[index].each do |item|
-                        normalized_item = []
-                        if item[:tuple].size == 1
-                            normalized_item << (item[:cycles] * 255 / @max_cycle_count).to_i
-                        end
-                        item[:tuple].each.with_index do |x, i|
-                            if watch[:components][i][:type] == 's8'
-                                x += 128
-                            elsif watch[:components][i][:type] == 'u16'
-                                x >>= 8
-                            elsif watch[:components][i][:type] == 's16'
-                                x = (x + 32768) >> 8
+                    if @watch_values.include?(index)
+                        @watch_values[index].each do |item|
+                            normalized_item = []
+                            if item[:tuple].size == 1
+                                normalized_item << (item[:cycles] * 255 / @max_cycle_count).to_i
                             end
-                            normalized_item << x
+                            item[:tuple].each.with_index do |x, i|
+                                if watch[:components][i][:type] == 's8'
+                                    x += 128
+                                elsif watch[:components][i][:type] == 'u16'
+                                    x >>= 8
+                                elsif watch[:components][i][:type] == 's16'
+                                    x = (x + 32768) >> 8
+                                end
+                                normalized_item << x
+                            end
+                            offset = normalized_item.reverse.inject(0) { |x, y| (x << 8) + y }
+                            histogram[offset] ||= 0
+                            histogram[offset] += 1
+                            histogram_x[normalized_item[0]] ||= 0
+                            histogram_x[normalized_item[0]] += 1
+                            histogram_y[normalized_item[1]] ||= 0
+                            histogram_y[normalized_item[1]] += 1
                         end
-                        offset = normalized_item.reverse.inject(0) { |x, y| (x << 8) + y }
-                        histogram[offset] ||= 0
-                        histogram[offset] += 1
-                        histogram_x[normalized_item[0]] ||= 0
-                        histogram_x[normalized_item[0]] += 1
-                        histogram_y[normalized_item[1]] ||= 0
-                        histogram_y[normalized_item[1]] += 1
+                    else
+                        max_cycle_count_for_function = @cycles_per_function[watch[:pc]].map do |x|
+                            x[:call_cycles]
+                        end.max
+                        @cycles_per_function[watch[:pc]].each do |entry|
+                            normalized_item = []
+                            normalized_item << (entry[:at_cycles] * 255 / @max_cycle_count).to_i
+                            normalized_item << (entry[:call_cycles] * 255 / max_cycle_count_for_function).to_i
+                            offset = normalized_item.reverse.inject(0) { |x, y| (x << 8) + y }
+                            histogram[offset] ||= 0
+                            histogram[offset] += 1
+                            histogram_x[normalized_item[0]] ||= 0
+                            histogram_x[normalized_item[0]] += 1
+                            histogram_y[normalized_item[1]] ||= 0
+                            histogram_y[normalized_item[1]] += 1
+                        end
                     end
 
                     histogram_max = histogram.values.max
@@ -482,7 +510,7 @@ class Champ
                                 end
                             end
                         end
-                        (0..1).each do |offset|
+                        (0..0).each do |offset|
                             component_label = component[:name]
                             if component_index == 0 && watch[:components].size == 2
                                 print_s(pixels, width, height,
@@ -497,13 +525,18 @@ class Champ
                             end
                         end
                     end
-                    label = "#{sprintf('0x%04x', watch[:pc])} / #{watch[:path]}:#{watch[:line_number]} (#{watch[:post] ? 'post' : 'pre'})"
+                    label = "#{sprintf('0x%04x', watch[:pc])} / #{watch[:path]}:#{watch[:line_number]}"
+                    if @watch_values.include?(index)
+                        label += " (#{watch[:post] ? 'post' : 'pre'})"
+                    end
                     print_s(pixels, width, height, width / 2 - 3 * label.size, height - 20, label, 31)
-                    label = @watch_called_from_subroutine[index].map do |x|
-                        "#{@label_for_pc[x] || sprintf('0x%04x', x)}+#{watch[:pc] - x}"
-                    end.join(', ')
-                    label = "at #{label}"
-                    print_s(pixels, width, height, width / 2 - 3 * label.size, height - 10, label, 31)
+                    if @watch_values.include?(index)
+                        label = @watch_called_from_subroutine[index].map do |x|
+                            "#{@label_for_pc[x] || sprintf('0x%04x', x)}+#{watch[:pc] - x}"
+                        end.join(', ')
+                        label = "at #{label}"
+                        print_s(pixels, width, height, width / 2 - 3 * label.size, height - 10, label, 31)
+                    end
                     
                     if watch[:components].size == 1
                         # this watch is 1D, add X axis labels for cycles
@@ -542,7 +575,7 @@ class Champ
                             end
                         end
                         
-                        (0..1).each do |offset|
+                        (0..0).each do |offset|
                             component_label = 'cycles'
                             print_s(pixels, width, height,
                                     (canvas_left + canvas_width * 0.5 - component_label.size * 3 + offset).to_i,
@@ -551,6 +584,46 @@ class Champ
                         end
                     end
 
+                    if @cycles_per_function.include?(watch[:pc])
+                        max_cycle_count_for_function = @cycles_per_function[watch[:pc]].map do |x|
+                            x[:call_cycles]
+                        end.max
+                        # this is a subroutine cycles watch, add Y axis labels for subroutine cycles
+                        labels = []
+                        labels << [0.0, '0']
+                        format_str = '%d'
+                        divisor = 1
+                        if max_cycle_count_for_function >= 1e6
+                            format_str = '%1.1fM'
+                            divisor = 1e6
+                        elsif max_cycle_count_for_function > 1e3
+                            format_str = '%1.1fk'
+                            divisor = 1e3
+                        end
+                            
+#                         labels << [1.0, sprintf(format_str, (max_cycle_count_for_function.to_f / divisor)).sub('.0', '')]
+                        
+                        remaining_space = canvas_width - labels.inject(0) { |a, b| a + b.size * 6 }
+                        space_per_label = sprintf(format_str, (max_cycle_count_for_function.to_f / divisor)).sub('.0', '').size * 6 * 2
+                        max_tween_labels = remaining_space / space_per_label
+                        step = ((max_cycle_count_for_function / max_tween_labels).to_f / divisor).ceil
+                        step = 1 if step == 0 # prevent infinite loop!
+                        x = step
+                        while x < max_cycle_count_for_function / divisor
+                            labels << [x.to_f * divisor / max_cycle_count_for_function, sprintf(format_str, x).sub('.0', '')]
+                            x += step
+                        end
+                        labels.each do |label|
+                            s = label[1]
+                            y = ((1.0 - label[0]) * canvas_height).to_i + canvas_top
+                            print_s_r(pixels, width, height, canvas_left - 12,
+                                        (y - s.size * (6 * (1.0 - label[0]))).to_i, s, 31)
+                            (-3..canvas_width).each do |x|
+                                pixels[y * width + (x + canvas_left)] |= 0x20
+                            end
+                        end
+                    end
+                    
                     tr = @highlight_color[1, 2].to_i(16)
                     tg = @highlight_color[3, 2].to_i(16)
                     tb = @highlight_color[5, 2].to_i(16)
@@ -601,6 +674,12 @@ class Champ
                 io.puts "</div>"
             end
             report.sub!('#{watches}', io.string)
+            if @cycles_per_function.empty?
+                report.sub!('#{cycle_watches}', '')
+            else
+                io = StringIO.new
+                report.sub!('#{cycle_watches}', io.string)
+            end
 
             # write cycles
             io = StringIO.new
@@ -615,16 +694,16 @@ class Champ
             io.puts "<th>Label</th>"
             io.puts "</tr>"
             io.puts "</thead>"
-            cycles_sum = @cycles_per_function.values.inject(0) { |a, b| a + b }
-            @cycles_per_function.keys.sort do |a, b|
-                @cycles_per_function[b] <=> @cycles_per_function[a]
+            cycles_sum = @total_cycles_per_function.values.inject(0) { |a, b| a + b }
+            @total_cycles_per_function.keys.sort do |a, b|
+                @total_cycles_per_function[b] <=> @total_cycles_per_function[a]
             end.each do |pc|
                 io.puts "<tr>"
                 io.puts "<td>#{sprintf('0x%04x', pc)}</td>"
-                io.puts "<td style='text-align: right;'>#{@cycles_per_function[pc]}</td>"
-                io.puts "<td style='text-align: right;'>#{sprintf('%1.2f%%', @cycles_per_function[pc].to_f * 100.0 / cycles_sum)}</td>"
+                io.puts "<td style='text-align: right;'>#{@total_cycles_per_function[pc]}</td>"
+                io.puts "<td style='text-align: right;'>#{sprintf('%1.2f%%', @total_cycles_per_function[pc].to_f * 100.0 / cycles_sum)}</td>"
                 io.puts "<td style='text-align: right;'>#{@calls_per_function[pc]}</td>"
-                io.puts "<td style='text-align: right;'>#{@cycles_per_function[pc] / @calls_per_function[pc]}</td>"
+                io.puts "<td style='text-align: right;'>#{@total_cycles_per_function[pc] / @calls_per_function[pc]}</td>"
                 io.puts "<td>#{@label_for_pc[pc]}</td>"
                 io.puts "</tr>"
 
@@ -652,8 +731,8 @@ class Champ
                 all_nodes.each do |node|
                     label = @label_for_pc[node] || sprintf('0x%04x', node)
                     label = "<B>#{label}</B>"
-                    if @calls_per_function[node] && @cycles_per_function[node]
-                        label += "<BR/>#{@cycles_per_function[node] / @calls_per_function[node]}"
+                    if @calls_per_function[node] && @total_cycles_per_function[node]
+                        label += "<BR/>#{@total_cycles_per_function[node] / @calls_per_function[node]}"
                     end
                     io.puts "  _#{node} [label = <#{label}>];"
                 end
@@ -751,6 +830,10 @@ class Champ
                             watch = parse_champ_directive(directive, false)
                             watch[:line_number] = line_number
                             watch[:pc] = pc
+                            if watch[:subroutine_cycles]
+                                watch[:components].first[:name] = "#{@label_for_pc[pc] || sprintf('0x%04x', pc)} cycles"
+                                @cycles_per_function[pc] = []
+                            end
                             @watches[pc] << watch
                         end
                     end
@@ -783,6 +866,13 @@ class Champ
                 fail("Error parsing champ directive: #{original_directive}")
             end
         else
+            if s == 'cycles'
+                result[:subroutine_cycles] = true
+                result[:components] = [
+                    {:subroutine_cycles => true}
+                ]
+                return result
+            end
             if s.include?('(post)')
                 result[:post] = true
                 s.sub!('(post)', '')
@@ -867,6 +957,7 @@ __END__
 <div style='padding-top: 0.1px;'>
     <h2>Watches</h2>
     #{watches}
+    #{cycle_watches}
 </div>
 </body>
 </html>
