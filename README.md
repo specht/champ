@@ -6,7 +6,7 @@ This is a 6502/65C02 emulator / profiler that enables you to really get to know 
 
 * full, cycle-accurate 65C02 emulation
 * screen output as animated GIF with exact frame timing
-* average frame rate
+* calculation of average frame rate
 * see how much time is spent in which subroutine
 * watch variables (single variables or pairs)
 * no required dependencies except Ruby, gcc and Merlin32
