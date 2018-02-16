@@ -76,7 +76,7 @@ Running this example results in the following watch graphs:
 ![A at PC 0x6006](doc/example01_1.gif?raw=true)
 ![A at PC 0x6007](doc/example01_2.gif?raw=true)
 
-Champ generates a graph for every watch. You can see the watched variable plotted against the cycles, and also the PC address, file name, and source line number of the watch as well as the subroutine in which the watch was defined.
+Champ generates a graph for every watch. You can see the watched variable plotted against the cycles, and also the PC address, file name, and source line number of the watch as well as the subroutine in which the watch was defined. At the right border you can see a histogram of the variable, which is pretty minimal in this example but may look more interesting in other cases.
 
 With the `@Au` directive, we tell champ to monitor the A register and interpret it as an unsigned 8 bit integer (likewise, `@As` would treat the value as a signed 8 bit integer). 
 
