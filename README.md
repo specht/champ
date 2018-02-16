@@ -36,6 +36,22 @@ We specified some source files (which will get compiled automatically) and some 
 
 Furthermore, we can disable subroutines by replacing the first opcode with a RTS (`instant_rts`). This is necessary in some cases because Champ does not emulate hardware and thus can not load data from disk, for example.
 
+### Defining watches
+
+You can watch registers or variables at certain program counter addresses by inserting a _champ directive_ in a comment after the respective code line in your assembler source code. All champ directives start with an _at sign_ (@). Here's an example:
+
+```
+LDA #2         ; load 2 into accumulator
+ASL            ; multiply by two
+STA SOMEWHERE  ; store result @Au
+```
+
+With the `@Au` directive, we tell champ to monitor the A register and interpret it as an unsigned 8 bit integer (likewise, `@As` would treat the value as a signed 8 bit integer). 
+
+By default, all champ values get recorded before the operation has been executed. To get the value after the operation, you can write: `@Au(post)`.
+
+### Running the profiler
+
 To start champ, type:
 
 ```
