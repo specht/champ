@@ -86,6 +86,7 @@ class Champ
         if @config['highlight']
             @highlight_color = @config['highlight']
         end
+        @histogram_color = '#12959f'
 
         @keywords = Set.new(KEYWORDS.split(/\s/).map { |x| x.strip }.reject { |x| x.empty? })
         @global_variables = {}
@@ -347,6 +348,8 @@ class Champ
                     width = nil
                     height = nil
                     histogram = {}
+                    histogram_x = {}
+                    histogram_y = {}
                     mask = [
                         [0,0,1,1,1,0,0],
                         [0,1,1,1,1,1,0],
@@ -374,20 +377,21 @@ class Champ
                         offset = normalized_item.reverse.inject(0) { |x, y| (x << 8) + y }
                         histogram[offset] ||= 0
                         histogram[offset] += 1
+                        histogram_x[normalized_item[0]] ||= 0
+                        histogram_x[normalized_item[0]] += 1
+                        histogram_y[normalized_item[1]] ||= 0
+                        histogram_y[normalized_item[1]] += 1
                     end
 
                     histogram_max = histogram.values.max
-                    width = 276
-                    height = 286
-                    canvas_top = 20
-                    canvas_left = 40
-                    canvas_width = width - 60
-                    canvas_height = height - 70
+                    histogram_x_max = histogram_x.values.max
+                    histogram_y_max = histogram_y.values.max
                     canvas_width = 200
                     canvas_height = 200
-                    canvas_top = 10
+                    histogram_height = 32
+                    canvas_top = 10 + histogram_height
                     canvas_left = 30
-                    canvas_right = 10
+                    canvas_right = 10 + histogram_height
                     canvas_bottom = 50
                     width = canvas_width + canvas_left + canvas_right
                     height = canvas_height + canvas_top + canvas_bottom
@@ -411,7 +415,24 @@ class Champ
                                     end
                                 end
                             end
-                            pixels[y * width + x] = (((value.to_f / histogram_max) ** 0.5) * 63).to_i
+                        end
+                        pixels[y * width + x] = (((value.to_f / histogram_max) ** 0.5) * 63).to_i
+                    end
+                    if watch[:components].size > 1
+                        # only show X histogram if it's not cycles
+                        histogram_x.each_pair do |x, value|
+                            x = (x * canvas_width) / 255 + canvas_left
+                            normalized_value = (value.to_f / histogram_x_max * 31).to_i
+                            (0..normalized_value).each do |dy|
+                                pixels[(canvas_top - dy - 4) * width + x] = normalized_value + 0x40
+                            end
+                        end
+                    end
+                    histogram_y.each_pair do |y, value|
+                        y = ((y ^ 0xff) * canvas_height) / 255 + canvas_top
+                        normalized_value = (value.to_f / histogram_y_max * 31).to_i
+                        (0..normalized_value).each do |dx|
+                            pixels[y * width + canvas_left + canvas_width + dx + 4] |= normalized_value + 0x40
                         end
                     end
 
@@ -448,16 +469,16 @@ class Champ
                                 x = (label[0] * canvas_width).to_i + canvas_left
                                 print_s(pixels, width, height,
                                         (x - s.size * (6 * label[0])).to_i,
-                                        canvas_top + canvas_height + 7, s, 63)
+                                        canvas_top + canvas_height + 7, s, 31)
                                 (0..(canvas_height + 3)).each do |y|
-                                    pixels[(y + canvas_top) * width + x] |= 0x40
+                                    pixels[(y + canvas_top) * width + x] |= 0x20
                                 end
                             else
                                 y = ((1.0 - label[0]) * canvas_height).to_i + canvas_top
                                 print_s_r(pixels, width, height, canvas_left - 12,
-                                            (y - s.size * (6 * (1.0 - label[0]))).to_i, s, 63)
+                                            (y - s.size * (6 * (1.0 - label[0]))).to_i, s, 31)
                                 (-3..canvas_width).each do |x|
-                                    pixels[y * width + (x + canvas_left)] |= 0x40
+                                    pixels[y * width + (x + canvas_left)] |= 0x20
                                 end
                             end
                         end
@@ -467,22 +488,22 @@ class Champ
                                 print_s(pixels, width, height,
                                         (canvas_left + canvas_width * 0.5 - component_label.size * 3 + offset).to_i,
                                         canvas_top + canvas_height + 18,
-                                        component_label, 63)
+                                        component_label, 31)
                             else
                                 print_s_r(pixels, width, height,
                                             canvas_left - 22,
                                             (canvas_top + canvas_height * 0.5 - component_label.size * 3 + offset).to_i,
-                                            component_label, 63)
+                                            component_label, 31)
                             end
                         end
                     end
                     label = "#{sprintf('0x%04x', watch[:pc])} / #{watch[:path]}:#{watch[:line_number]} (#{watch[:post] ? 'post' : 'pre'})"
-                    print_s(pixels, width, height, width / 2 - 3 * label.size, height - 20, label, 63)
+                    print_s(pixels, width, height, width / 2 - 3 * label.size, height - 20, label, 31)
                     label = @watch_called_from_subroutine[index].map do |x|
                         "#{@label_for_pc[x] || sprintf('0x%04x', x)}+#{watch[:pc] - x}"
                     end.join(', ')
                     label = "at #{label}"
-                    print_s(pixels, width, height, width / 2 - 3 * label.size, height - 10, label, 63)
+                    print_s(pixels, width, height, width / 2 - 3 * label.size, height - 10, label, 31)
                     
                     if watch[:components].size == 1
                         # this watch is 1D, add X axis labels for cycles
@@ -515,9 +536,9 @@ class Champ
                             x = (label[0] * canvas_width).to_i + canvas_left
                             print_s(pixels, width, height,
                                     (x - s.size * (6 * label[0])).to_i,
-                                    canvas_top + canvas_height + 7, s, 63)
+                                    canvas_top + canvas_height + 7, s, 31)
                             (0..(canvas_height + 3)).each do |y|
-                                pixels[(y + canvas_top) * width + x] |= 0x40
+                                pixels[(y + canvas_top) * width + x] |= 0x20
                             end
                         end
                         
@@ -526,24 +547,28 @@ class Champ
                             print_s(pixels, width, height,
                                     (canvas_left + canvas_width * 0.5 - component_label.size * 3 + offset).to_i,
                                     canvas_top + canvas_height + 18,
-                                    component_label, 63)
+                                    component_label, 31)
                         end
                     end
 
                     tr = @highlight_color[1, 2].to_i(16)
                     tg = @highlight_color[3, 2].to_i(16)
                     tb = @highlight_color[5, 2].to_i(16)
+                    hr = @histogram_color[1, 2].to_i(16)
+                    hg = @histogram_color[3, 2].to_i(16)
+                    hb = @histogram_color[5, 2].to_i(16)
 
                     if pixels
-                        gi, go, gt = Open3.popen2("./pgif #{width} #{height} 128")
-                        palette = [''] * 128
-                        (0...64).each do |i|
+                        colors_used = 32 * 3
+                        gi, go, gt = Open3.popen2("./pgif #{width} #{height} #{colors_used}")
+                        palette = [0] * colors_used
+                        (0...32).each do |i|
                             if (i == 0)
                                 r = 0xff
                                 g = 0xff
                                 b = 0xff
                             else
-                                l = (((63 - i) + 1) << 2) - 1
+                                l = (((31 - i) + 1) << 3) - 1
                                 r = l * tr / 255
                                 g = l * tg / 255
                                 b = l * tb / 255
@@ -552,7 +577,12 @@ class Champ
                             r = r * 4 / 5
                             g = g * 4 / 5
                             b = b * 4 / 5
-                            palette[i + 64] = sprintf('%02x%02x%02x', r, g, b)
+                            palette[i + 32] = sprintf('%02x%02x%02x', r, g, b)
+                            fade = (i.to_f / 31) * 0.5 + 0.5
+                            xr = (hr * fade + 0xff * (1.0 - fade)).to_i
+                            xg = (hg * fade + 0xff * (1.0 - fade)).to_i
+                            xb = (hb * fade + 0xff * (1.0 - fade)).to_i
+                            palette[i + 64] = sprintf('%02x%02x%02x', xr, xg, xb)
                         end
                         gi.puts palette.join("\n")
                         gi.puts 'f'

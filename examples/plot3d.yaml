@@ -11,3 +11,4 @@ entry: ENTRY
 # highlight: '#c3def1'
 instant_rts:
     - LOAD1
+    - PREAD

@@ -340,14 +340,14 @@ int main(int argc, char** argv)
     char* temp = 0;
     uint16_t width = strtol(argv[1], &temp, 0);
     uint16_t height = strtol(argv[2], &temp, 0);
-    uint8_t colors_used = strtol(argv[3], &temp, 0);
+    uint16_t colors_used = strtol(argv[3], &temp, 0);
 
     uint8_t color_depth = 1;
     while (colors_used > (1 << color_depth))
         color_depth++;
     if (color_depth < 2)
         color_depth = 2;
-
+    
     // write header
     struct header_block header;
     strncpy(header.signature, "GIF", 3);
