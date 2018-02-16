@@ -799,7 +799,7 @@ __END__
     <title>champ report</title>
     <style type='text/css'>
     body {
-        background-color: #eee;
+        // background-color: #eee;
         font-family: monospace;
     }
     .screenshot {
@@ -807,6 +807,13 @@ __END__
         box-shadow: inset 0 0 10px rgba(0,0,0,1.0);
         padding: 12px;
         border-radius: 8px;
+    }
+    img, svg {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        margin-right: 10px;
+        margin-bottom: 10px;
     }
     th, td {
         text-align: left;
