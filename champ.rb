@@ -622,7 +622,9 @@ class Champ
                 all_nodes.each do |node|
                     label = @label_for_pc[node] || sprintf('0x%04x', node)
                     label = "<B>#{label}</B>"
-                    label += "<BR/>#{@cycles_per_function[node]}"
+                    if @calls_per_function[node] && @cycles_per_function[node]
+                        label += "<BR/>#{@cycles_per_function[node] / @calls_per_function[node]}"
+                    end
                     io.puts "  _#{node} [label = <#{label}>];"
                 end
                 @call_graph_counts.each_pair do |key, entries|
