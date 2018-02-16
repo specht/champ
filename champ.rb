@@ -68,10 +68,18 @@ class Champ
                 exit(1)
             end
         end
-        @config = YAML.load(File.read(args.shift))
+        config_path = args.shift
+        @config = YAML.load(File.read(config_path))
         @source_files = []
         @config['load'].each_pair do |address, path|
-            @source_files << {:path => File.absolute_path(path), :address => address}
+            fixed_path = path.dup
+            unless fixed_path[0] == '/'
+                fixed_path = File.absolute_path(File.join(File.dirname(config_path), fixed_path))
+            end
+            @source_files << {
+                :path => fixed_path, 
+                :address => address
+            }
         end
         @highlight_color = '#fce98d'
         if @config['highlight']
@@ -363,11 +371,19 @@ class Champ
 
                     histogram_max = histogram.values.max
                     width = 276
-                    height = (watch[:components].size == 1) ? 286 : 286
+                    height = 286
                     canvas_top = 20
                     canvas_left = 40
                     canvas_width = width - 60
                     canvas_height = height - 70
+                    canvas_width = 256
+                    canvas_height = 256
+                    canvas_top = 10
+                    canvas_left = 30
+                    canvas_right = 10
+                    canvas_bottom = 50
+                    width = canvas_width + canvas_left + canvas_right
+                    height = canvas_height + canvas_top + canvas_bottom
                     pixels = [0] * width * height
 
                     histogram.each_pair do |key, value|
@@ -460,6 +476,52 @@ class Champ
                     end.join(', ')
                     label = "at #{label}"
                     print_s(pixels, width, height, width / 2 - 3 * label.size, height - 10, label, 63)
+                    
+                    if watch[:components].size == 1
+                        # this watch is 1D, add X axis labels for cycles
+                        labels = []
+                        labels << [0.0, '0']
+                        format_str = '%d'
+                        divisor = 1
+                        if @max_cycle_count >= 1e6
+                            format_str = '%1.1fM'
+                            divisor = 1e6
+                        elsif @max_cycle_count > 1e3
+                            format_str = '%1.1fk'
+                            divisor = 1e3
+                        end
+                            
+#                         labels << [1.0, sprintf(format_str, (@max_cycle_count.to_f / divisor)).sub('.0', '')]
+                        
+                        remaining_space = canvas_width - labels.inject(0) { |a, b| a + b.size * 6 }
+                        space_per_label = sprintf(format_str, (@max_cycle_count.to_f / divisor)).sub('.0', '').size * 6 * 2
+                        max_tween_labels = remaining_space / space_per_label
+                        step = ((@max_cycle_count / max_tween_labels).to_f / divisor).ceil
+                        step = 1 if step == 0 # prevent infinite loop!
+                        x = step
+                        while x < @max_cycle_count / divisor
+                            labels << [x.to_f * divisor / @max_cycle_count, sprintf(format_str, x).sub('.0', '')]
+                            x += step
+                        end
+                        labels.each do |label|
+                            s = label[1]
+                            x = (label[0] * canvas_width).to_i + canvas_left
+                            print_s(pixels, width, height,
+                                    (x - s.size * (6 * label[0])).to_i,
+                                    canvas_top + canvas_height + 7, s, 63)
+                            (0..(canvas_height + 3)).each do |y|
+                                pixels[(y + canvas_top) * width + x] |= 0x40
+                            end
+                        end
+                        
+                        (0..1).each do |offset|
+                            component_label = 'cycles'
+                            print_s(pixels, width, height,
+                                    (canvas_left + canvas_width * 0.5 - component_label.size * 3 + offset).to_i,
+                                    canvas_top + canvas_height + 18,
+                                    component_label, 63)
+                        end
+                    end
 
                     tr = @highlight_color[1, 2].to_i(16)
                     tg = @highlight_color[3, 2].to_i(16)

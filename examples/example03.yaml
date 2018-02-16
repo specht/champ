@@ -1,0 +1,3 @@
+load:
+    0x6000: example03.s
+entry: 0x6000

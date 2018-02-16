@@ -36,20 +36,6 @@ We specified some source files (which will get compiled automatically) and some 
 
 Furthermore, we can disable subroutines by replacing the first opcode with a RTS (`instant_rts`). This is necessary in some cases because Champ does not emulate hardware and thus can not load data from disk, for example.
 
-### Defining watches
-
-You can watch registers or variables at certain program counter addresses by inserting a _champ directive_ in a comment after the respective code line in your assembler source code. All champ directives start with an _at sign_ (@). Here's an example:
-
-```
-LDA #2         ; load 2 into accumulator
-ASL            ; multiply by two
-STA SOMEWHERE  ; store result @Au
-```
-
-With the `@Au` directive, we tell champ to monitor the A register and interpret it as an unsigned 8 bit integer (likewise, `@As` would treat the value as a signed 8 bit integer). 
-
-By default, all champ values get recorded before the operation has been executed. To get the value after the operation, you can write: `@Au(post)`.
-
 ### Running the profiler
 
 To start champ, type:
@@ -64,6 +50,105 @@ This will run the emulator and write the HTML report to `report.html`. If you do
 
 ![Champ Screenshot](doc/screenshot.png?raw=true "Fig. 1 Champ Screenshot")
 
+### Defining watches
+
+You can watch registers or variables at certain program counter addresses by inserting a _champ directive_ in a comment after the respective code line in your assembler source code. All champ directives start with an _at sign_ (`@`). Here's an example ([example01.yaml](example01.yaml) / [example01.s](example01.s)):
+
+```
+        DSK test
+        MX %11
+        ORG $6000
+    
+FOO     EQU $8000
+
+        JSR TEST
+        RTS
+    
+TEST    LDA #64         ; load 64 into accumulator
+        ASL             ; multiply by two @Au 
+        STA FOO         ; store result @Au
+        RTS
+```
+
+Running this example results in the following watch graphs:
+
+![A at PC 0x6006](doc/example01_1.gif?raw=true)
+![A at PC 0x6007](doc/example01_2.gif?raw=true)
+
+Champ generates a graph for every watch. You can see the watched variable plotted against the cycles, and also the PC address, file name, and source line number of the watch as well as the subroutine in which the watch was defined.
+
+With the `@Au` directive, we tell champ to monitor the A register and interpret it as an unsigned 8 bit integer (likewise, `@As` would treat the value as a signed 8 bit integer). 
+
+By default, all champ values get recorded before the operation has been executed. To get the value after the operation, you can write: `@Au(post)`. Feel free to add as many champ directives as you need in a single line, each starting with a new at sign.
+
+### Global variables
+
+In addition to watching individual registers, you can also watch global variables (([example02.yaml](example02.yaml) / [example02.s](example02.s))):
+
+```
+        DSK test
+        MX %11
+        ORG $6000
+    
+FOO     EQU $8000       ; @u16
+
+        JSR TEST
+        RTS
+    
+TEST    LDA #0
+        STA FOO
+        LDA #$40
+        STA FOO+1       ; @FOO(post)
+        RTS
+```
+
+Here, we declare the type of the global variable in the same place the variable itself is declared, using @u8@, @s8@, @u16@, or @s16@. Later, we can just watch the variable by issuing a champ directive like `@FOO@`. In this example, we use the `(post)` option to see the variable contents after the `STA` operation.
+
+![FOO at PC 0x600b](doc/example02_1.gif?raw=true)
+
+Here's another example with some more interesting plots ([example03.yaml](example03.yaml) / [example03.s](example03.s)):
+
+```
+        DSK test
+        MX %11
+        ORG $6000
+        
+FOO     EQU $8000
+    
+        JSR TEST
+        RTS
+    
+TEST    LDX #$FF
+        LDA #1
+LOOP    TAY
+        TXA
+        EOR #$FF
+        LSR
+        LSR
+        STA FOO
+        TYA
+        ADC FOO     ; @Au(post)
+        DEX         ; @Xu(post)
+        BNE LOOP
+```
+
+This is a small program which lets the accumulator grow quadratically while X decreases linearly:
+
+![A at PC 0x6012](doc/example03_1.gif?raw=true)
+![X at PC 0x6015](doc/example03_2.gif?raw=true)
+
+### Two-dimensional watches
+
+We can also watch pairs of variables by separating them with a comma in the champ directive:
+
+```
+        DEX         ; @Xu(post) @Au,FOO(post)
+```
+
+This will plot FOO against X:
+
+![FOO against A at PC 0x6015](doc/example03_3.gif?raw=true)
+
 ## Did you know?
 
-By the way, there's a full-fledged, incremental, standalone, no-dependencies GIF encoder in `pgif.c` that writes animated GIFs and uses some optimizations to further minimize space. It's stream-friendly and as you feed pixels in via `stdin`, it dutifully writes GIF data to `stdout` until `stdin` gets closed.
+By the way, there's a full-fledged, incremental, standalone, no-dependencies GIF encoder in [pgif.c](pgif.c) that writes animated GIFs and uses some optimizations to further minimize space. It's stream-friendly and as you feed pixels in via `stdin`, it dutifully writes GIF data to `stdout` until `stdin` gets closed.

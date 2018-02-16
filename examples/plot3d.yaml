@@ -1,0 +1,13 @@
+load:
+    0x6000: ../plot3d/plot3d242.s
+    0x1200: ../plot3d/multtab.s
+    0x8400: ../plot3d/ldrwtab.s
+    0x8900: ../plot3d/SINETABLE
+    0x8b00: ../plot3d/object2.s
+    0x9000: ../plot3d/object1.s
+    0x9500: ../plot3d/FONT
+    0xb600: ../plot3d/projtab.s
+entry: ENTRY
+# highlight: '#c3def1'
+instant_rts:
+    - LOAD1
