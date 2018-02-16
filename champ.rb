@@ -376,8 +376,8 @@ class Champ
                     canvas_left = 40
                     canvas_width = width - 60
                     canvas_height = height - 70
-                    canvas_width = 256
-                    canvas_height = 256
+                    canvas_width = 200
+                    canvas_height = 200
                     canvas_top = 10
                     canvas_left = 30
                     canvas_right = 10
