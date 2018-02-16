@@ -132,7 +132,7 @@ LOOP    TAY
         BNE LOOP
 ```
 
-This is a small program which lets the accumulator register grow quadratically while X decreases linearly:
+This is a small program which lets the accumulator grow quadratically while X decreases linearly:
 
 ![A at PC 0x6012](doc/example03_1.gif?raw=true)
 ![X at PC 0x6015](doc/example03_2.gif?raw=true)
