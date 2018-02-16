@@ -9,7 +9,8 @@ This is a 6502/65C02 emulator / profiler that enables you to really get to know 
 * average frame rate
 * see how much time is spent in which subroutine
 * watch variables (single variables or pairs)
-* no dependencies except Ruby, gcc and Merlin32
+* no required dependencies except Ruby, gcc and Merlin32
+** optional: GraphViz if you want a call graph
 
 ## Usage
 

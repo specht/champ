@@ -51,6 +51,7 @@ class Champ
             STDERR.puts '  --no-animation'
             exit(1)
         end
+        @have_dot = `dot -V 2>&1`.strip[0, 3] == 'dot'
         @files_dir = 'report-files'
         FileUtils.rm_rf(@files_dir)
         FileUtils.mkpath(@files_dir)
@@ -180,6 +181,7 @@ class Champ
             frame_cycles = []
             @cycles_per_function = {}
             @calls_per_function = {}
+            @call_graph_counts = {}
             @max_cycle_count = 0
             call_stack = []
             last_call_stack_cycles = 0
@@ -205,10 +207,15 @@ class Champ
                             @max_cycle_count = cycles
                             @calls_per_function[pc] ||= 0
                             @calls_per_function[pc] += 1
+                            calling_function = start_pc
                             unless call_stack.empty?
+                                calling_function = call_stack.last
                                 @cycles_per_function[call_stack.last] ||= 0
                                 @cycles_per_function[call_stack.last] += cycles - last_call_stack_cycles
                             end
+                            @call_graph_counts[calling_function] ||= {}
+                            @call_graph_counts[calling_function][pc] ||= 0
+                            @call_graph_counts[calling_function][pc] += 1
                             last_call_stack_cycles = cycles
                             call_stack << pc
                         elsif parts.first == 'rts'
@@ -595,6 +602,51 @@ class Champ
             io.puts "</table>"
             report.sub!('#{cycles}', io.string)
 
+            if @have_dot
+                # render call graph
+                all_nodes = Set.new()
+                @call_graph_counts.each_pair do |key, entries|
+                    all_nodes << key
+                    entries.keys.each do |other_key|
+                        all_nodes << other_key
+                    end
+                end
+                io = StringIO.new
+                io.puts "digraph {"
+                io.puts "overlap = false;"
+                io.puts "rankdir = TB;"
+                io.puts "splines = true;"
+                io.puts "graph [fontname = Helvetica, fontsize = 9, size = \"14, 11\", nodesep = 0.2, ranksep = 0.3, ordering = out];"
+                io.puts "node [fontname = Helvetica, fontsize = 9, shape = rect, style = filled, fillcolor = \"#fce94f\" color = \"#c4a000\"];"
+                io.puts "edge [fontname = Helvetica, fontsize = 9, color = \"#444444\"];"
+                all_nodes.each do |node|
+                    label = @label_for_pc[node] || sprintf('0x%04x', node)
+                    label = "<B>#{label}</B>"
+                    label += "<BR/>#{@cycles_per_function[node]}"
+                    io.puts "  _#{node} [label = <#{label}>];"
+                end
+                @call_graph_counts.each_pair do |key, entries|
+                    entries.keys.each do |other_key|
+                        io.puts "_#{key} -> _#{other_key} [label = \"#{entries[other_key]}x\"];"
+                    end
+                end
+                io.puts "}"
+                
+                dot = io.string
+                
+                svg = Open3.popen2('dot -Tsvg') do |stdin, stdout, thread|
+                    stdin.print(dot)
+                    stdin.close
+                    stdout.read
+                end
+                File::open(File.join(@files_dir, 'call_graph.svg'), 'w') do |f|
+                    f.write(svg)
+                end
+                report.sub!('#{call_graph}', svg)
+            else
+                report.sub!('#{call_graph}', '<em>(GraphViz not installed)</em>')
+            end
+            
             f.puts report
         end
         puts ' done.'
@@ -772,6 +824,8 @@ __END__
 <div style='margin-left: 460px; padding-top: 5px;'>
     <h2>Watches</h2>
     #{watches}
+    <h2>Call Graph</h2>
+    #{call_graph}
 </div>
 </body>
 </html>
