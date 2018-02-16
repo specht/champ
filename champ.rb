@@ -631,7 +631,7 @@ class Champ
                     champ_directives = []
                     if code.include?(';')
                         comment = code[code.index(';') + 1, code.size].strip
-                        comment.scan(/@[^\s]+/).each do |match|
+                        comment.scan(/@[^;][^\s]+/).each do |match|
                             champ_directives << match.to_s
                         end
                     end

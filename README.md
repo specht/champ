@@ -149,6 +149,14 @@ This will plot FOO against X:
 
 ![FOO against A at PC 0x6015](doc/example03_3.gif?raw=true)
 
+### Disabling watches
+
+To disable a watch, add a `;` right behind the `@`:
+
+```
+        ADC FOO     ; @;Au(post)
+```
+
 ## Did you know?
 
 By the way, there's a full-fledged, incremental, standalone, no-dependencies GIF encoder in [pgif.c](pgif.c) that writes animated GIFs and uses some optimizations to further minimize space. It's stream-friendly and as you feed pixels in via `stdin`, it dutifully writes GIF data to `stdout` until `stdin` gets closed.
