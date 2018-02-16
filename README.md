@@ -154,7 +154,7 @@ This will plot FOO against X:
 
 ### Subroutine cycle watches
 
-If you want to know the distribution of cycles spent in certain subroutines, use the `@cycles` directive to add a watch for this information:
+If you want to know the distribution of cycles spent in certain subroutines, use the `@cycles` directive to add a watch for this information ([example04.yaml](example04.yaml) / [example04.s](example04.s)):
 
 ```
         DSK test
