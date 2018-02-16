@@ -16,7 +16,7 @@ This is a 6502/65C02 emulator / profiler that enables you to really get to know 
 
 First, make sure you have gcc, ruby and Merlin32 installed. You need to prepare a YAML file to tell champ about all source and object files and their memory locations.
 
-Take `plot3d.yaml` for example (using [Marc A. Golombeck's excellent 3D-Demo](https://github.com/mgolombeck/3D-Demo)):
+Take [plot3d.yaml](examples/plot3d.yaml) for example (using [Marc A. Golombeck's excellent 3D-Demo](https://github.com/mgolombeck/3D-Demo)):
 
 ```
 load:
