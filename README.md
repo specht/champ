@@ -175,6 +175,8 @@ COUNT   DEX         ; @Xu(post) @cycles
         RTS
 ```
 
+Please note that this will only yield data for labels which actually get called via `JSR` at some point in the program.
+
 This programm calls the `COUNT` subroutine three times with different X arguments, and we get both X and the number of cycles spent in `COUNT`:
 
 ![X at PC 0x6010](doc/example04_1.gif?raw=true)
