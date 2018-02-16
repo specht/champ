@@ -16,6 +16,7 @@ LOOP    TAY
         LSR
         STA FOO
         TYA
+        CLC
         ADC FOO     ; @Au(post)
         DEX         ; @Xu(post) @Au,FOO(post)
         BNE LOOP

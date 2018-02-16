@@ -424,7 +424,7 @@ class Champ
                             x = (x * canvas_width) / 255 + canvas_left
                             normalized_value = (value.to_f / histogram_x_max * 31).to_i
                             (0..normalized_value).each do |dy|
-                                pixels[(canvas_top - dy - 4) * width + x] = normalized_value + 0x40
+                                pixels[(canvas_top - dy - 4) * width + x] = normalized_value - dy + 0x40
                             end
                         end
                     end
@@ -432,7 +432,7 @@ class Champ
                         y = ((y ^ 0xff) * canvas_height) / 255 + canvas_top
                         normalized_value = (value.to_f / histogram_y_max * 31).to_i
                         (0..normalized_value).each do |dx|
-                            pixels[y * width + canvas_left + canvas_width + dx + 4] |= normalized_value + 0x40
+                            pixels[y * width + canvas_left + canvas_width + dx + 4] |= normalized_value - dx + 0x40
                         end
                     end
 
