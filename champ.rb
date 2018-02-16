@@ -584,7 +584,7 @@ class Champ
                         end
                     end
 
-                    if (!@watch_values.include?(index)) && @cycles_per_function.include?(watch[:pc])
+                    if (!@watch_values.include?(index)) && @cycles_per_function.include?(watch[:pc]) && (!@cycles_per_function[watch[:pc]].empty?)
                         max_cycle_count_for_function = @cycles_per_function[watch[:pc]].map do |x|
                             x[:call_cycles]
                         end.max
