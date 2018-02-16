@@ -103,7 +103,7 @@ TEST    LDA #0
         RTS
 ```
 
-Here, we declare the type of the global variable in the same place the variable itself is declared, using `u8`, `s8`, `u16`, or `s16` to declare the type. Later, we can just watch the variable by issuing a champ directive like `@FOO@`. In this example, we use the `(post)` option to see the variable contents after the `STA` operation.
+Here, we declare the type of the global variable in the same place the variable itself is declared, using `u8`, `s8`, `u16`, or `s16` to declare the type. Later, we can just watch the variable by issuing a champ directive like `@FOO`. In this example, we use the `(post)` option to see the variable contents after the `STA` operation.
 
 ![FOO at PC 0x600b](doc/example02_1.gif?raw=true)
 
