@@ -5,7 +5,7 @@
 FOO     EQU $8000 ; @u8
     
         JSR TEST
-        RTS
+        BRK
     
 TEST    LDX #$FF
         LDA #1
@@ -20,3 +20,4 @@ LOOP    TAY
         ADC FOO     ; @Au(post)
         DEX         ; @Xu(post) @Au,FOO(post)
         BNE LOOP
+        RTS

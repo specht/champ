@@ -63,7 +63,7 @@ You can watch registers or variables at certain program counter addresses by ins
 FOO     EQU $8000
 
         JSR TEST
-        RTS
+        BRK
     
 TEST    LDA #64         ; load 64 into accumulator
         ASL             ; multiply by two @Au 
@@ -94,7 +94,7 @@ In addition to watching individual registers, you can also watch global variable
 FOO     EQU $8000       ; @u16
 
         JSR TEST
-        RTS
+        BRK
     
 TEST    LDA #0
         STA FOO
@@ -114,10 +114,10 @@ Here's another example with some more interesting plots ([example03.yaml](exampl
         MX %11
         ORG $6000
         
-FOO     EQU $8000
+FOO     EQU $8000 ; @u8
     
         JSR TEST
-        RTS
+        BRK
     
 TEST    LDX #$FF
         LDA #1
@@ -130,8 +130,9 @@ LOOP    TAY
         TYA
         CLC
         ADC FOO     ; @Au(post)
-        DEX         ; @Xu(post)
+        DEX         ; @Xu(post) @Au,FOO(post)
         BNE LOOP
+        RTS
 ```
 
 This is a small program which lets the accumulator grow exponentially while X decreases linearly:
@@ -150,6 +151,36 @@ We can also watch pairs of variables by separating them with a comma in the cham
 This will plot FOO against X:
 
 ![FOO against A at PC 0x6015](doc/example03_3.gif?raw=true)
+
+### Subroutine cycle watches
+
+If you want to know the distribution of cycles spent in certain subroutines, use the `@cycles` directive to add a watch for this information:
+
+```
+        DSK test
+        MX %11
+        ORG $6000
+        
+        LDX #$20
+        JSR COUNT
+        LDX #$30
+        JSR COUNT
+        LDX #$40
+        JSR COUNT
+        
+        BRK
+    
+COUNT   DEX         ; @Xu(post) @cycles
+        BNE COUNT
+        RTS
+```
+
+This programm calls the `COUNT` subroutine three times with different X arguments, and we get both X and the number of cycles spent in `COUNT`:
+
+![X at PC 0x6010](doc/example04_1.gif?raw=true)
+![COUNT cycles](doc/example04_2.gif?raw=true)
+
+We see the three incantations of `COUNT` with `X` decreasing to 0 each time, and at the end of every loop, the amount of cycles spent in `COUNT`.
 
 ### Disabling watches
 

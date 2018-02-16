@@ -5,7 +5,7 @@
 FOO     EQU $8000       ; @u16
 
         JSR TEST
-        RTS
+        BRK
     
 TEST    LDA #0
         STA FOO

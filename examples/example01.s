@@ -5,7 +5,7 @@
 FOO     EQU $8000
 
         JSR TEST
-        RTS
+        BRK
     
 TEST    LDA #64         ; load 64 into accumulator
         ASL             ; multiply by two @Au 
