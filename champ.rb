@@ -63,6 +63,7 @@ class Champ
         @execution_log_size = 20
         @code_for_pc = {}
         @source_for_file = {}
+        @pc_for_file_and_line = {}
         args = ARGV.dup
         while args.size > 1
             item = args.shift
@@ -788,25 +789,33 @@ class Champ
             # write error dump
             if @error
                 io = StringIO.new
-                io.puts "<div>"
-                io.puts "<h2>Error log</h2>"
+                io.puts "<div style='float: left; margin-right: 10px;'>"
+                io.puts "<h2>Source code</h2>"
                 
                 io.puts "<code><pre>"
                 source_code = @code_for_pc[@error[:pc]]
-                STDERR.puts source_code.to_yaml
                 offset = source_code[:line] - 1
                 this_filename = source_code[:file]
-                io.puts "<span class='heading'>#{sprintf('%-83s', this_filename)}</span>"
+                io.puts "<span class='heading'> Line |   PC   | #{sprintf('%-75s', this_filename)}</span>"
                 ((offset - 16)..(offset + 16)).each do |i|
                     next if i < 0 || i >= @source_for_file[this_filename].size
                     io.print "<span class='#{(i == offset) ? 'error' : 'code'}'>"
-                    io.print sprintf('%5d | %-75s', i + 1, @source_for_file[this_filename][i])
+                    line_pc = nil
+                    if @pc_for_file_and_line[this_filename]
+                        if @pc_for_file_and_line[this_filename][i]
+                            line_pc = sprintf('0x%04x', @pc_for_file_and_line[this_filename][i + 1])
+                        end
+                    end
+                    line_pc ||= ''
+                    io.print sprintf('%5d | %6s | %-75s', i + 1, line_pc, @source_for_file[this_filename][i])
                     io.print "</span>" if i == offset
                     io.puts
                 end
                 io.puts "</pre></code>"
+                io.puts "</div>"
                 
-                io.puts "<h3>Debug log</h3>"
+                io.puts "<div style='display: inline-block;'>"
+                io.puts "<h2>Execution log</h2>"
                 io.puts "<code><pre>"
                 io.puts sprintf("<span class='heading'>   PC    |    A     X     Y     PC      SP  Flags </span>")
                 @execution_log.each do |item|
@@ -816,6 +825,8 @@ class Champ
                 io.puts "</pre></code>"
                 
                 io.puts "</div>"
+                
+                io.puts "<div style='clear: both;'></div>"
                 
                 report.sub!('#{error}', io.string)
             else
@@ -843,6 +854,7 @@ class Champ
         @source_line = -3
         File.open(path, 'r') do |f|
             f.each_line do |line|
+                @pc_for_file_and_line[input_file] ||= {}
                 @source_line += 1
                 parts = line.split('|')
                 next unless parts.size > 2
@@ -855,15 +867,13 @@ class Champ
                     code_parts = code.split(/\s+/)
 
                     line_number = parts[1].split(' ').map { |x| x.strip }.reject { |x| x.empty? }.last.to_i
-#                     unless (@pc_code_lines.last || 0) == pc
-                        STDERR.puts line_number
-                        @code_for_pc[pc] = {
-                            :file => input_file,
-                            :line => line_number,
-                        }
-#                         @pc_code_lines << pc
-#                     end
+                    @code_for_pc[pc] = {
+                        :file => input_file,
+                        :line => line_number,
+                    }
+                    @pc_for_file_and_line[input_file][line_number] = pc
                             
+                    
                     next if code_parts.empty?
                     label = nil
 
