@@ -802,7 +802,7 @@ class Champ
                     io.print "<span class='#{(i == offset) ? 'error' : 'code'}'>"
                     line_pc = nil
                     if @pc_for_file_and_line[this_filename]
-                        if @pc_for_file_and_line[this_filename][i]
+                        if @pc_for_file_and_line[this_filename][i + 1]
                             line_pc = sprintf('0x%04x', @pc_for_file_and_line[this_filename][i + 1])
                         end
                     end
