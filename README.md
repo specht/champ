@@ -148,7 +148,7 @@ We can also watch pairs of variables by separating them with a comma in the cham
         DEX         ; @Xu(post) @Au,FOO(post)
 ```
 
-This will plot FOO against X:
+This will plot FOO against A:
 
 ![FOO against A at PC 0x6015](doc/example03_3.gif?raw=true)
 
