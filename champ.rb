@@ -725,9 +725,9 @@ class Champ
                 io.puts "overlap = false;"
                 io.puts "rankdir = LR;"
                 io.puts "splines = true;"
-                io.puts "graph [fontname = Helvetica, fontsize = 9, size = \"14, 11\", nodesep = 0.2, ranksep = 0.3, ordering = out];"
-                io.puts "node [fontname = Helvetica, fontsize = 9, shape = rect, style = filled, fillcolor = \"#fce94f\" color = \"#c4a000\"];"
-                io.puts "edge [fontname = Helvetica, fontsize = 9, color = \"#444444\"];"
+                io.puts "graph [fontname = sans, fontsize = 8, size = \"14, 11\", nodesep = 0.2, ranksep = 0.3, ordering = out];"
+                io.puts "node [fontname = sans, fontsize = 8, shape = rect, style = filled, fillcolor = \"#fce94f\" color = \"#c4a000\"];"
+                io.puts "edge [fontname = sans, fontsize = 8, color = \"#444444\"];"
                 all_nodes.each do |node|
                     label = @label_for_pc[node] || sprintf('0x%04x', node)
                     label = "<B>#{label}</B>"
@@ -736,13 +736,21 @@ class Champ
                     end
                     io.puts "  _#{node} [label = <#{label}>];"
                 end
+                max_call_count = 0
+                @call_graph_counts.each_pair do |key, entries|
+                    entries.values.each do |count|
+                        max_call_count = count if count > max_call_count
+                    end
+                end
+
                 @call_graph_counts.each_pair do |key, entries|
                     entries.keys.each do |other_key|
-                        io.puts "_#{key} -> _#{other_key} [label = \"#{entries[other_key]}x\"];"
+                        penwidth = 0.5 + ((entries[other_key].to_f / max_call_count) ** 0.3) * 2
+                        io.puts "_#{key} -> _#{other_key} [label = \"#{entries[other_key]}x\", penwidth = #{penwidth}];"
                     end
                 end
                 io.puts "}"
-                
+
                 dot = io.string
                 
                 svg = Open3.popen2('dot -Tsvg') do |stdin, stdout, thread|
