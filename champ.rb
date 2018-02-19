@@ -63,6 +63,7 @@ class Champ
         @execution_log_size = 20
         @code_for_pc = {}
         @source_for_file = {}
+        @max_source_width_for_file = {}
         @pc_for_file_and_line = {}
         args = ARGV.dup
         while args.size > 1
@@ -796,7 +797,8 @@ class Champ
                 source_code = @code_for_pc[@error[:pc]]
                 offset = source_code[:line] - 1
                 this_filename = source_code[:file]
-                io.puts "<span class='heading'> Line |   PC   | #{sprintf('%-75s', this_filename)}</span>"
+                format_str = "%-#{@max_source_width_for_file[this_filename]}s"
+                io.puts "<span class='heading'> Line |   PC   | #{sprintf(format_str, this_filename)}</span>"
                 ((offset - 16)..(offset + 16)).each do |i|
                     next if i < 0 || i >= @source_for_file[this_filename].size
                     io.print "<span class='#{(i == offset) ? 'error' : 'code'}'>"
@@ -807,7 +809,7 @@ class Champ
                         end
                     end
                     line_pc ||= ''
-                    io.print sprintf('%5d | %6s | %-75s', i + 1, line_pc, @source_for_file[this_filename][i])
+                    io.print sprintf("%5d | %6s | %-#{@max_source_width_for_file[this_filename]}s", i + 1, line_pc, @source_for_file[this_filename][i])
                     io.print "</span>" if i == offset
                     io.puts
                 end
@@ -850,7 +852,9 @@ class Champ
 
     def parse_merlin_output(path)
         input_file = File.basename(@source_path)
-        @source_for_file[input_file] = File.read(@source_path).split("\n")
+        @source_for_file[input_file] = File.read(@source_path).split("\n").map { |x| x.gsub("\t", ' ' * 4) }
+        @max_source_width_for_file[input_file] = @source_for_file[input_file].map { |x| x.size }.max
+
         @source_line = -3
         File.open(path, 'r') do |f|
             f.each_line do |line|
