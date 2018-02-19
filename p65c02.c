@@ -633,13 +633,6 @@ void handle_next_opcode()
             break;
     }
 
-    if (show_log)
-    {
-        fprintf(stderr, "# %04x | %d | %02x | %s %-18s | ", old_pc, cycles, read_opcode, OPCODE_STRINGS[opcode],
-            ADDRESSING_MODE_STRINGS[addressing_mode]
-        );
-    }
-
     int unhandled_opcode = 0;
     uint8_t t8 = 0;
     uint16_t t16 = 0;
@@ -948,7 +941,10 @@ void handle_next_opcode()
     };
     if (unhandled_opcode)
     {
-        fprintf(stderr, "Opcode %s not implemented yet at PC 0x%04x\n",
+        printf("error %04x Opcode %s not implemented yet.\n",
+               old_pc, OPCODE_STRINGS[opcode]);
+        fflush(stdout);
+        fprintf(stderr, "Opcode %s not implemented yet at PC 0x%04x.\n",
                 OPCODE_STRINGS[opcode], cpu.pc);
         exit(1);
     }
@@ -957,17 +953,9 @@ void handle_next_opcode()
         cycles_per_function[trace_stack_function[trace_stack_pointer + 1]] += cycles;
     if (show_log)
     {
-        char flags_str[6];
-        flags_str[0] = test_flag(CARRY) ? 'C' : 'c';
-        flags_str[1] = test_flag(ZERO) ? 'Z' : 'z';
-        flags_str[2] = test_flag(DECIMAL_MODE) ? 'D' : 'd';
-        flags_str[3] = test_flag(OVERFLOW) ? 'V' : 'v';
-        flags_str[4] = test_flag(NEGATIVE) ? 'N' : 'n';
-        flags_str[5] = 0;
-
-        fprintf(stderr, "A: %02x, X: %02x, Y: %02x, PC: %04x, SP: %02x, FLAGS: %02x %s | %10ld |",
-               cpu.a, cpu.x, cpu.y, cpu.pc, cpu.sp, cpu.flags, flags_str, cpu.total_cycles);
-        fprintf(stderr, "\n");
+        printf("log %04x %02x %02x %02x %04x %02x %02x\n",
+               old_pc, cpu.a, cpu.x, cpu.y, cpu.pc, cpu.sp, cpu.flags);
+        fflush(stdout);
     }
 }
 
