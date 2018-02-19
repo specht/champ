@@ -31,6 +31,7 @@ uint64_t frame_count = 0;
 
 uint16_t start_pc = 0x6000;
 uint16_t start_frame_pc = 0xffff;
+uint16_t old_pc = 0;
 
 uint16_t yoffset[192] = {
     0x0000, 0x0400, 0x0800, 0x0c00, 0x1000, 0x1400, 0x1800, 0x1c00,
@@ -98,6 +99,7 @@ typedef struct {
 } r_watch;
 
 r_watch *watches = 0;
+uint8_t watches_allocated = 0;
 size_t watch_count = 0;
 int32_t watch_offset_for_pc_and_post[0x20000];
 
@@ -150,6 +152,9 @@ void push(uint8_t value)
 {
     if (cpu.sp == 0)
     {
+        printf("error %04x Stack overflow\n", old_pc);
+        fflush(stdout);
+
         fprintf(stderr, "Stack overflow!\n");
         exit(1);
     }
@@ -161,6 +166,8 @@ uint8_t pop()
 {
     if (cpu.sp == 0xff)
     {
+        printf("error %04x Stack underrun\n", old_pc);
+        fflush(stdout);
         fprintf(stderr, "Stack underrun!\n");
         exit(1);
     }
@@ -564,7 +571,7 @@ void branch(uint8_t condition, int8_t offset, uint8_t* cycles)
 
 void handle_next_opcode()
 {
-    uint16_t old_pc = cpu.pc;
+    old_pc = cpu.pc;
 
     // fetch opcode, addressing mode and cycles for next instruction
     uint8_t read_opcode = 0;
@@ -575,6 +582,9 @@ void handle_next_opcode()
 
     if (opcode == NO_OPCODE || addressing_mode == NO_ADDRESSING_MODE)
     {
+        printf("error %04x Unhandled opcode: %02x\n", old_pc, read_opcode);
+        fflush(stdout);
+        
         fprintf(stderr, "Unhandled opcode at %04x: %02x\n", old_pc, read_opcode);
         exit(1);
     }
@@ -1067,10 +1077,14 @@ int main(int argc, char** argv)
     int watch_index = 0;
     while (fgets(s, 1024, stdin))
     {
-        if (!watches)
+        if (s[0] == '\n')
+            break;
+        if (!watches_allocated)
         {
             watch_count = parse_int(s, 0);
-            watches = malloc(sizeof(r_watch) * watch_count);
+            if (watch_count > 0)
+                watches = malloc(sizeof(r_watch) * watch_count);
+            watches_allocated = 1;
         }
         else
         {

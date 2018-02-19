@@ -853,7 +853,7 @@ class Champ
     def parse_merlin_output(path)
         input_file = File.basename(@source_path)
         @source_for_file[input_file] = File.read(@source_path).split("\n").map { |x| x.gsub("\t", ' ' * 4) }
-        @max_source_width_for_file[input_file] = @source_for_file[input_file].map { |x| x.size }.max
+        @max_source_width_for_file[input_file] = [@source_for_file[input_file].map { |x| x.size }.max, 40].max
 
         @source_line = -3
         File.open(path, 'r') do |f|
