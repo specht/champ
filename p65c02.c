@@ -33,6 +33,8 @@ uint16_t start_pc = 0x6000;
 uint16_t start_frame_pc = 0xffff;
 uint16_t old_pc = 0;
 
+uint8_t brk_encountered = 0;
+
 uint16_t yoffset[192] = {
     0x0000, 0x0400, 0x0800, 0x0c00, 0x1000, 0x1400, 0x1800, 0x1c00,
     0x0080, 0x0480, 0x0880, 0x0c80, 0x1080, 0x1480, 0x1880, 0x1c80,
@@ -704,7 +706,7 @@ void handle_next_opcode()
             branch(1, relative_offset, &cycles);
             break;
         case BRK:
-            unhandled_opcode = 1;
+            brk_encountered = 1;
             break;
         case BVC:
             branch(!test_flag(OVERFLOW), relative_offset, &cycles);
@@ -1181,7 +1183,9 @@ int main(int argc, char** argv)
     uint32_t next_display_refresh = 0;
     uint8_t old_screen_number = 0;
     int last_cycles = -1;
+    brk_encountered = 0;
     while (1) {
+        if (brk_encountered) break;
         handle_watch(cpu.pc, 0);
         uint16_t old_pc = cpu.pc;
         handle_next_opcode();
